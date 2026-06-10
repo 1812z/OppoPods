@@ -153,6 +153,7 @@ fun MainUI(
     val islandMode = remember { mutableStateOf(appConfig.islandMode) }
     val islandShowTimings = remember { mutableStateOf(appConfig.islandShowTimings) }
     val spatialAudioMode = remember { mutableStateOf(prefs.getInt("spatial_audio_mode", ConfigManager.SPATIAL_AUDIO_OFF)) }
+    val eqPreset = remember { mutableStateOf(-1) }
     val earphonePrefs = remember { mutableStateOf(PodImagePrefs.load(prefs)) }
     val adaptiveCapabilityOverride = remember { mutableStateOf(appConfig.adaptiveCapabilityOverride) }
     val spatialAudioCapabilityOverride = remember { mutableStateOf(appConfig.spatialAudioCapabilityOverride) }
@@ -258,6 +259,10 @@ fun MainUI(
                         spatialAudioMode.value = p1.getIntExtra("mode", ConfigManager.SPATIAL_AUDIO_OFF)
                     }
 
+                    OppoPodsAction.ACTION_PODS_EQ_PRESET_CHANGED -> {
+                        eqPreset.value = p1.getIntExtra("preset", -1)
+                    }
+
                     OppoPodsAction.ACTION_PODS_DUAL_DEVICE_CONNECTION_CHANGED -> {
                         dualDeviceConnection.value = p1.getBooleanExtra("enabled", false)
                     }
@@ -335,6 +340,7 @@ fun MainUI(
             addAction(OppoPodsAction.ACTION_PODS_GAME_MODE_CHANGED)
             addAction(OppoPodsAction.ACTION_PODS_TRANSPARENCY_VOCAL_ENHANCEMENT_CHANGED)
             addAction(OppoPodsAction.ACTION_PODS_SPATIAL_AUDIO_CHANGED)
+            addAction(OppoPodsAction.ACTION_PODS_EQ_PRESET_CHANGED)
             addAction(OppoPodsAction.ACTION_PODS_DUAL_DEVICE_CONNECTION_CHANGED)
             addAction(OppoPodsAction.ACTION_PODS_CONNECTED)
             addAction(OppoPodsAction.ACTION_PODS_CONNECTION_STATE_CHANGED)
@@ -454,6 +460,16 @@ fun MainUI(
         prefs.edit().putInt("spatial_audio_mode", normalizedMode).apply()
         Intent(OppoPodsAction.ACTION_SPATIAL_AUDIO_SET).apply {
             this.putExtra("mode", normalizedMode)
+            setPackage("com.android.bluetooth")
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            context.sendBroadcast(this)
+        }
+    }
+
+    fun setEqPreset(preset: Int) {
+        eqPreset.value = preset
+        Intent(OppoPodsAction.ACTION_EQ_PRESET_SET).apply {
+            this.putExtra("preset", preset)
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             context.sendBroadcast(this)
@@ -598,6 +614,9 @@ fun MainUI(
                 onGameModeChange = { setGameMode(it) },
                 spatialAudioMode = spatialAudioMode.value,
                 onSpatialAudioModeChange = { setSpatialAudioMode(it) },
+                eqPreset = eqPreset.value,
+                onEqPresetChange = { setEqPreset(it) },
+                eqSupported = displayCapabilities.eqSupported,
                 displayDualDeviceConnection = displayDualDeviceConnection,
                 onDualDeviceConnectionChange = { setDualDeviceConnection(it) },
                 spatialAudioSupported = displayCapabilities.spatialAudioSupported,

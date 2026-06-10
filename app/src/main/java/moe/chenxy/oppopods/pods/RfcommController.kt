@@ -62,6 +62,8 @@ object RfcommController {
     private var currentGameMode: Boolean = false
     private var currentTransparencyVocalEnhancement: Boolean = false
     private var currentSpatialAudioMode: Int = SpatialAudioMode.OFF
+    /** -1 = unknown; otherwise one of [EqPreset.ALL]. */
+    private var currentEqPreset: Int = -1
     private var currentDualDeviceConnection: Boolean = false
     private var autoGameModeEnabled: Boolean = false
     private var gameModeImplementation: GameModeImplementation = GameModeImplementation.STANDARD
@@ -156,6 +158,12 @@ object RfcommController {
         }
     }
 
+    private fun changeUIEqPreset(presetId: Int) {
+        sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_EQ_PRESET_CHANGED) {
+            this.putExtra("preset", presetId)
+        }
+    }
+
     private fun changeUIDualDeviceConnectionStatus(enabled: Boolean) {
         sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_DUAL_DEVICE_CONNECTION_CHANGED) {
             this.putExtra("enabled", enabled)
@@ -175,6 +183,7 @@ object RfcommController {
                 changeUIGameModeStatus(currentGameMode)
                 changeUITransparencyVocalEnhancementStatus(currentTransparencyVocalEnhancement)
                 changeUISpatialAudioStatus(currentSpatialAudioMode)
+                changeUIEqPreset(currentEqPreset)
                 changeUIDualDeviceConnectionStatus(currentDualDeviceConnection)
                 if (::mDevice.isInitialized && isConnected) {
                     sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_CONNECTED) {
@@ -219,6 +228,10 @@ object RfcommController {
             OppoPodsAction.ACTION_SPATIAL_AUDIO_SET -> {
                 val mode = intent.getIntExtra("mode", SpatialAudioMode.OFF)
                 setSpatialAudioMode(mode)
+            }
+            OppoPodsAction.ACTION_EQ_PRESET_SET -> {
+                val preset = intent.getIntExtra("preset", -1)
+                if (preset in EqPreset.ALL) setEqPreset(preset)
             }
             OppoPodsAction.ACTION_DUAL_DEVICE_CONNECTION_SET -> {
                 val enabled = intent.getBooleanExtra("enabled", false)
@@ -723,6 +736,15 @@ object RfcommController {
             return
         }
 
+        // EQ preset (handles both 0x0504 push notify and 0x810F query response)
+        val eqPresetResult = EqPresetParser.parse(packet)
+        if (eqPresetResult != null) {
+            Log.d(TAG, "EQ preset received: $eqPresetResult")
+            currentEqPreset = eqPresetResult
+            changeUIEqPreset(eqPresetResult)
+            return
+        }
+
         // Try parse as ANC mode response
         val ancResult = AncModeParser.parse(packet)
         if (ancResult != null) {
@@ -803,6 +825,7 @@ object RfcommController {
         currentGameMode = false
         currentTransparencyVocalEnhancement = false
         currentSpatialAudioMode = SpatialAudioMode.OFF
+        currentEqPreset = -1
         currentDualDeviceConnection = false
         lastKnownCaseBattery = 0
         lastKnownCaseCharging = false
@@ -909,6 +932,20 @@ object RfcommController {
         }
     }
 
+    fun setEqPreset(presetId: Int) {
+        if (presetId !in EqPreset.ALL) {
+            Log.w(TAG, "setEqPreset ignored: invalid preset $presetId")
+            return
+        }
+        val packet = Enums.eqPresetPacket(presetId)
+        Log.i(TAG, "setEqPreset: $presetId, packet=${packet.toHexString(HexFormat.UpperCase)}")
+        currentEqPreset = presetId
+        changeUIEqPreset(presetId)
+        CoroutineScope(Dispatchers.IO).launch {
+            sendPacketSafe(packet, "eq preset control")
+        }
+    }
+
     fun setDualDeviceConnection(enabled: Boolean) {
         val packet = Enums.dualDeviceConnectionPacket(enabled)
         Log.i(TAG, "setDualDeviceConnection: $enabled, packet=${packet.toHexString(HexFormat.UpperCase)}")
@@ -987,6 +1024,10 @@ object RfcommController {
         sendPacketSafe(Enums.QUERY_BATTERY, reason)
         delay(50)
         sendPacketSafe(Enums.QUERY_ANC, reason)
+        if (currentCapabilities().eqSupported) {
+            delay(50)
+            sendPacketSafe(Enums.QUERY_EQ, reason)
+        }
     }
 
     fun disconnectAudio(context: Context, device: BluetoothDevice?) {

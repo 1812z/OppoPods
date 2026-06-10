@@ -18,6 +18,13 @@
     <string name="spatial_audio_summary">Choose the spatial audio mode</string>
     <string name="spatial_audio_fixed">Fixed</string>
     <string name="spatial_audio_head_tracking">Head Tracking</string>
+    <string name="eq_preset_title">Master Tuning</string>
+    <string name="eq_preset_summary">Choose the master EQ preset</string>
+    <string name="eq_preset_authentic">Authentic</string>
+    <string name="eq_preset_detail">Detail</string>
+    <string name="eq_preset_vocal">Vocal</string>
+    <string name="eq_preset_bass">Bass</string>
+    <string name="eq_preset_dynaudio">Dynaudio Tuned</string>
     <string name="game_mode_implementation">Game mode implementation</string>
     <string name="game_mode_implementation_standard">Standard</string>
     <string name="game_mode_implementation_compatible">Compatible</string>
