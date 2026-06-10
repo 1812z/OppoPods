@@ -145,6 +145,17 @@ object Cmd {
     const val SET_SPATIAL_SOUND_SWITCH_RESPONSE = 0x8403
     /** Spatial audio mode notification */
     const val SPATIAL_AUDIO_NOTIFY = 0x0510
+
+    /**
+     * Master switch for the bud's spatial DSP. Distinct from [SET_SPATIAL_AUDIO]:
+     * the mode cmd only stores the *value* (off/fixed/head-tracking), this switch
+     * is what actually engages the DSP pipeline. On Enco X3 firmware 1.3.2, sending
+     * only 0x0422 makes the bud report the mode back correctly but produces no
+     * audible effect — heytap/melody also reports "off" because it reads this
+     * switch's state, not the mode. Payload `[on]`. (Firmware analysis cross-ref:
+     * see `firmware-analysis/14_spatial.md` in the protocol research notes.)
+     */
+    const val SET_SPATIAL_AUDIO_SWITCH = 0x041E
 }
 
 /** Pre-built packets. */
@@ -253,6 +264,16 @@ object Enums {
     fun spatialAudioPacket(mode: Int): ByteArray = OppoPackets.buildPacket(
         cmd = Cmd.SET_SPATIAL_AUDIO,
         payload = byteArrayOf(mode.coerceIn(SpatialAudioMode.OFF, SpatialAudioMode.HEAD_TRACKING).toByte())
+    )
+
+    /**
+     * Toggle the bud's spatial DSP master switch. Payload `[on]`.
+     * See [Cmd.SET_SPATIAL_AUDIO_SWITCH] for why this needs to be paired with
+     * [spatialAudioPacket] on Enco X3.
+     */
+    fun spatialAudioSwitchPacket(on: Boolean): ByteArray = OppoPackets.buildPacket(
+        cmd = Cmd.SET_SPATIAL_AUDIO_SWITCH,
+        payload = byteArrayOf(if (on) 0x01 else 0x00)
     )
 
     /** Set spatial sound switch: AA 09 00 00 03 04 F0 02 00 1B [00/01]. */
