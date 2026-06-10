@@ -911,16 +911,29 @@ object RfcommController {
 
     fun setSpatialAudioMode(mode: Int) {
         val normalizedMode = mode.coerceIn(SpatialAudioMode.OFF, SpatialAudioMode.HEAD_TRACKING)
-        val packet = if (currentCapabilities().spatialSoundSwitchSupported) {
-            Enums.spatialSoundSwitchPacket(normalizedMode != SpatialAudioMode.OFF)
-        } else {
-            Enums.spatialAudioPacket(normalizedMode)
-        }
-        Log.i(TAG, "setSpatialAudioMode: $normalizedMode, packet=${packet.toHexString(HexFormat.UpperCase)}")
+        val capabilities = currentCapabilities()
+        Log.i(TAG, "setSpatialAudioMode: $normalizedMode")
         currentSpatialAudioMode = normalizedMode
         changeUISpatialAudioStatus(normalizedMode)
         CoroutineScope(Dispatchers.IO).launch {
-            sendPacketSafe(packet, "spatial audio control")
+            if (capabilities.spatialSoundSwitchSupported) {
+                // Free4/Air5: single SET_FEATURE(0x1B) packet handles both enable and value.
+                val packet = Enums.spatialSoundSwitchPacket(normalizedMode != SpatialAudioMode.OFF)
+                Log.d(TAG, "spatial sound switch packet=${packet.toHexString(HexFormat.UpperCase)}")
+                sendPacketSafe(packet, "spatial audio control")
+            } else {
+                // Enco X3: two-step — first toggle the 0x041E master switch, then set the
+                // 0x0422 mode. Sending only the mode stores the value but does NOT engage
+                // the bud's spatial DSP. Verified on Enco X3 firmware 1.3.2.
+                val switchOn = normalizedMode != SpatialAudioMode.OFF
+                val switchPacket = Enums.spatialAudioSwitchPacket(switchOn)
+                val modePacket = Enums.spatialAudioPacket(normalizedMode)
+                Log.d(TAG, "spatial switch packet=${switchPacket.toHexString(HexFormat.UpperCase)}")
+                Log.d(TAG, "spatial mode packet=${modePacket.toHexString(HexFormat.UpperCase)}")
+                sendPacketSafe(switchPacket, "spatial audio switch")
+                delay(50)
+                sendPacketSafe(modePacket, "spatial audio mode")
+            }
         }
     }
 
