@@ -19,6 +19,13 @@
     <string name="spatial_audio_summary">选择空间音频模式</string>
     <string name="spatial_audio_fixed">固定</string>
     <string name="spatial_audio_head_tracking">头部跟踪</string>
+    <string name="eq_preset_title">大师调音</string>
+    <string name="eq_preset_summary">选择大师调音预设</string>
+    <string name="eq_preset_authentic">至臻原音</string>
+    <string name="eq_preset_detail">高清解析</string>
+    <string name="eq_preset_vocal">纯享人声</string>
+    <string name="eq_preset_bass">澎湃低音</string>
+    <string name="eq_preset_dynaudio">丹拿特调</string>
     <string name="game_mode_implementation">游戏模式实现方式</string>
     <string name="game_mode_implementation_standard">标准</string>
     <string name="game_mode_implementation_compatible">兼容</string>

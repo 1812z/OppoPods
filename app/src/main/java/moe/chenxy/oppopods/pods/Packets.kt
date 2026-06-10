@@ -115,6 +115,21 @@ object SpatialAudioMode {
     const val HEAD_TRACKING = 0x02
 }
 
+/**
+ * Master EQ preset IDs for OPPO Enco X3 ("大师调音" / Master Tuning).
+ * Values are non-contiguous because other products in the same protocol family
+ * use the missing slots (4..6).
+ */
+object EqPreset {
+    const val AUTHENTIC = 0  // 至臻原音 (Authentic)
+    const val DETAIL = 1     // 高清解析 (Detail)
+    const val VOCAL = 2      // 纯享人声 (Vocal)
+    const val BASS = 3       // 澎湃低音 (Bass)
+    const val DYNAUDIO = 7   // 丹拿特调 (Dynaudio tuned)
+    /** All supported presets, in UI display order. */
+    val ALL: List<Int> = listOf(AUTHENTIC, DETAIL, VOCAL, BASS, DYNAUDIO)
+}
+
 /** Protocol command codes. */
 object Cmd {
     /** Set ANC mode */
@@ -156,6 +171,15 @@ object Cmd {
      * see `firmware-analysis/14_spatial.md` in the protocol research notes.)
      */
     const val SET_SPATIAL_AUDIO_SWITCH = 0x041E
+
+    /** Set master EQ preset ("大师调音"). Payload `[presetId]`. */
+    const val SET_EQ = 0x0406
+    /** Query current EQ preset (no payload). */
+    const val QUERY_EQ_PRESET = 0x010F
+    /** Response to [QUERY_EQ_PRESET]. Payload `[status, preset]`. */
+    const val EQ_PRESET_RESPONSE = 0x810F
+    /** Unsolicited push notification when EQ preset changes. Payload `[preset]`. */
+    const val EQ_PRESET_NOTIFY = 0x0504
 }
 
 /** Pre-built packets. */
@@ -274,6 +298,17 @@ object Enums {
     fun spatialAudioSwitchPacket(on: Boolean): ByteArray = OppoPackets.buildPacket(
         cmd = Cmd.SET_SPATIAL_AUDIO_SWITCH,
         payload = byteArrayOf(if (on) 0x01 else 0x00)
+    )
+
+    /** Set master EQ preset. Payload `[presetId]`. */
+    fun eqPresetPacket(presetId: Int): ByteArray = OppoPackets.buildPacket(
+        cmd = Cmd.SET_EQ,
+        payload = byteArrayOf(presetId.toByte())
+    )
+
+    /** Query current EQ preset: AA 07 00 00 0F 01 F0 00 00 */
+    val QUERY_EQ: ByteArray = OppoPackets.buildPacket(
+        cmd = Cmd.QUERY_EQ_PRESET, payload = byteArrayOf()
     )
 
     /** Set spatial sound switch: AA 09 00 00 03 04 F0 02 00 1B [00/01]. */
@@ -450,6 +485,34 @@ object SpatialAudioParser {
         return when (packet[10].toInt() and 0xFF) {
             0x00 -> false
             0x01 -> true
+            else -> null
+        }
+    }
+}
+
+/**
+ * Parser for the EQ preset, handling both:
+ *  - cmd 0x0504 (unsolicited change notification, payload `[preset]`)
+ *  - cmd 0x810F (response to [Cmd.QUERY_EQ_PRESET], payload `[status, preset]`)
+ *
+ * Buds push 0x0504 whenever EQ changes but don't push initial state on connect,
+ * so we query 0x010F at connect time and parse the 0x810F response here.
+ */
+object EqPresetParser {
+    fun parse(data: ByteArray): Int? {
+        if (data.size < 10 || data[0] != 0xAA.toByte()) return null
+        val cmd = (data[4].toInt() and 0xFF) or ((data[5].toInt() and 0xFF) shl 8)
+        val payLen = (data[7].toInt() and 0xFF) or ((data[8].toInt() and 0xFF) shl 8)
+        return when (cmd) {
+            Cmd.EQ_PRESET_NOTIFY -> {
+                if (payLen < 1) return null
+                (data[9].toInt() and 0xFF).takeIf { it in EqPreset.ALL }
+            }
+            Cmd.EQ_PRESET_RESPONSE -> {
+                if (payLen < 2 || data.size < 11) return null
+                // payload[0] = status (0 on success), payload[1] = preset
+                (data[10].toInt() and 0xFF).takeIf { it in EqPreset.ALL }
+            }
             else -> null
         }
     }

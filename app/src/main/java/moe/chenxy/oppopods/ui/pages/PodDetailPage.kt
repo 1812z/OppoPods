@@ -37,6 +37,7 @@ import moe.chenxy.oppopods.ui.components.PodStatus
 import moe.chenxy.oppopods.utils.miuiStrongToast.data.BatteryParams
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
+import moe.chenxy.oppopods.pods.EqPreset
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
@@ -61,6 +62,9 @@ fun PodDetailPage(
     spatialAudioSupported: Boolean = false,
     spatialSoundSupported: Boolean = false,
     adaptiveModeEnabled: Boolean = true,
+    eqPreset: Int = -1,
+    onEqPresetChange: (Int) -> Unit = {},
+    eqSupported: Boolean = false,
     boxImagePath: String? = null,
 ) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -119,6 +123,9 @@ fun PodDetailPage(
                     spatialAudioSupported = spatialAudioSupported,
                     spatialSoundSupported = spatialSoundSupported,
                     adaptiveModeEnabled = adaptiveModeEnabled,
+                    eqPreset = eqPreset,
+                    onEqPresetChange = onEqPresetChange,
+                    eqSupported = eqSupported,
                     bottomContentPadding = bottomContentPadding
                 )
             }
@@ -158,6 +165,9 @@ fun PodDetailPage(
             spatialAudioSupported = spatialAudioSupported,
             spatialSoundSupported = spatialSoundSupported,
             adaptiveModeEnabled = adaptiveModeEnabled,
+            eqPreset = eqPreset,
+            onEqPresetChange = onEqPresetChange,
+            eqSupported = eqSupported,
             bottomContentPadding = bottomContentPadding
         )
     }
@@ -188,6 +198,9 @@ private fun LazyListScope.podControlItems(
     spatialAudioSupported: Boolean,
     spatialSoundSupported: Boolean,
     adaptiveModeEnabled: Boolean,
+    eqPreset: Int,
+    onEqPresetChange: (Int) -> Unit,
+    eqSupported: Boolean,
     bottomContentPadding: Dp
 ) {
     val spatialAudioValues = listOf(
@@ -262,6 +275,30 @@ private fun LazyListScope.podControlItems(
                 checked = dualDeviceConnection,
                 onCheckedChange = onDualDeviceConnectionChange
             )
+        }
+    }
+    if (eqSupported) {
+        item {
+            // Build the labels INSIDE item { } — stringResource is @Composable and would
+            // crash if called from the LazyListScope guard.
+            val eqOptions = listOf(
+                stringResource(R.string.eq_preset_authentic),
+                stringResource(R.string.eq_preset_detail),
+                stringResource(R.string.eq_preset_vocal),
+                stringResource(R.string.eq_preset_bass),
+                stringResource(R.string.eq_preset_dynaudio),
+            )
+            Card(
+                modifier = Modifier.padding(horizontal = 12.dp)
+            ) {
+                OverlayDropdownPreference(
+                    title = stringResource(R.string.eq_preset_title),
+                    summary = stringResource(R.string.eq_preset_summary),
+                    items = eqOptions,
+                    selectedIndex = EqPreset.ALL.indexOf(eqPreset).coerceAtLeast(0),
+                    onSelectedIndexChange = { onEqPresetChange(EqPreset.ALL[it]) }
+                )
+            }
         }
     }
     item {

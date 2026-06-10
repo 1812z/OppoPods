@@ -22,6 +22,8 @@ object OppoPodsAction {
     const val ACTION_PODS_TRANSPARENCY_VOCAL_ENHANCEMENT_CHANGED = "chen.action.oppopods.pods_transparency_vocal_enhancement_changed"
     const val ACTION_SPATIAL_AUDIO_SET = "chen.action.oppopods.spatial_audio_set"
     const val ACTION_PODS_SPATIAL_AUDIO_CHANGED = "chen.action.oppopods.pods_spatial_audio_changed"
+    const val ACTION_EQ_PRESET_SET = "chen.action.oppopods.eq_preset_set"
+    const val ACTION_PODS_EQ_PRESET_CHANGED = "chen.action.oppopods.pods_eq_preset_changed"
     const val ACTION_DUAL_DEVICE_CONNECTION_SET = "chen.action.oppopods.dual_device_connection_set"
     const val ACTION_PODS_DUAL_DEVICE_CONNECTION_CHANGED = "chen.action.oppopods.pods_dual_device_connection_changed"
     const val ACTION_CYCLE_ANC = "chen.action.oppopods.cycle_anc"
