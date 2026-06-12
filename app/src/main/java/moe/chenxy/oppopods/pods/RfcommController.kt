@@ -487,6 +487,7 @@ object RfcommController {
                 this.addAction(OppoPodsAction.ACTION_GAME_MODE_IMPLEMENTATION_CHANGED)
                 this.addAction(OppoPodsAction.ACTION_TRANSPARENCY_VOCAL_ENHANCEMENT_SET)
                 this.addAction(OppoPodsAction.ACTION_SPATIAL_AUDIO_SET)
+                this.addAction(OppoPodsAction.ACTION_EQ_PRESET_SET)
                 this.addAction(OppoPodsAction.ACTION_DUAL_DEVICE_CONNECTION_SET)
                 this.addAction(OppoPodsAction.ACTION_CYCLE_ANC)
                 this.addAction(OppoPodsAction.ACTION_CONFIG_CHANGED)

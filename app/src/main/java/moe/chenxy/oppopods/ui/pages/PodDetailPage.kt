@@ -269,28 +269,14 @@ private fun LazyListScope.podControlItems(
                     }
                 )
             }
-            SwitchPreference(
-                title = stringResource(R.string.dual_device_connection),
-                summary = stringResource(if (dualDeviceConnection) R.string.enabled else R.string.off),
-                checked = dualDeviceConnection,
-                onCheckedChange = onDualDeviceConnectionChange
-            )
-        }
-    }
-    if (eqSupported) {
-        item {
-            // Build the labels INSIDE item { } — stringResource is @Composable and would
-            // crash if called from the LazyListScope guard.
-            val eqOptions = listOf(
-                stringResource(R.string.eq_preset_authentic),
-                stringResource(R.string.eq_preset_detail),
-                stringResource(R.string.eq_preset_vocal),
-                stringResource(R.string.eq_preset_bass),
-                stringResource(R.string.eq_preset_dynaudio),
-            )
-            Card(
-                modifier = Modifier.padding(horizontal = 12.dp)
-            ) {
+            if (eqSupported) {
+                val eqOptions = listOf(
+                    stringResource(R.string.eq_preset_authentic),
+                    stringResource(R.string.eq_preset_detail),
+                    stringResource(R.string.eq_preset_vocal),
+                    stringResource(R.string.eq_preset_bass),
+                    stringResource(R.string.eq_preset_dynaudio),
+                )
                 OverlayDropdownPreference(
                     title = stringResource(R.string.eq_preset_title),
                     summary = stringResource(R.string.eq_preset_summary),
@@ -299,6 +285,12 @@ private fun LazyListScope.podControlItems(
                     onSelectedIndexChange = { onEqPresetChange(EqPreset.ALL[it]) }
                 )
             }
+            SwitchPreference(
+                title = stringResource(R.string.dual_device_connection),
+                summary = stringResource(if (dualDeviceConnection) R.string.enabled else R.string.off),
+                checked = dualDeviceConnection,
+                onCheckedChange = onDualDeviceConnectionChange
+            )
         }
     }
     item {
