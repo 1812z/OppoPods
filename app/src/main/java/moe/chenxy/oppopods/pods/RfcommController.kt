@@ -481,10 +481,11 @@ object RfcommController {
             mPrefs.getString(GameModeImplementation.PREF_KEY, null)
         )
         ConfigManager.refreshFromPrefs(mPrefs)
-        Log.d(TAG, "Adaptive support initial: ${currentCapabilities().adaptiveSupported}")
-        Log.d(TAG, "Auto game mode initial: $autoGameModeEnabled")
-        Log.d(TAG, "Game mode implementation initial: ${gameModeImplementation.preferenceValue}")
-        Log.d(TAG, "RFCOMM UUID initial: $OPPO_RFCOMM_UUID")
+        Log.i(TAG, "connectPod: deviceName=${device.name} ancImpl=${currentCapabilities().ancImplementation} ancOverride=${ConfigManager.ancImplementationCapabilityOverride()}")
+        Log.i(TAG, "Adaptive support initial: ${currentCapabilities().adaptiveSupported}")
+        Log.i(TAG, "Auto game mode initial: $autoGameModeEnabled")
+        Log.i(TAG, "Game mode implementation initial: ${gameModeImplementation.preferenceValue}")
+        Log.i(TAG, "RFCOMM UUID initial: $OPPO_RFCOMM_UUID")
 
         if (!receiverRegistered) {
             context.registerReceiver(broadcastReceiver, IntentFilter().apply {
@@ -1034,7 +1035,8 @@ object RfcommController {
     private fun Int.floorMod(divisor: Int): Int = ((this % divisor) + divisor) % divisor
 
     fun setANCMode(mode: Int) {
-        Log.d(TAG, "setANCMode: $mode")
+        val caps = currentCapabilities()
+        Log.i(TAG, "setANCMode: mode=$mode ancImpl=${caps.ancImplementation} deviceName=${cachedDeviceName}")
         currentAnc = mode
         var packet = when (mode) {
             1 -> Enums.ANC_OFF
@@ -1047,13 +1049,16 @@ object RfcommController {
             8 -> Enums.ANC_NOISE_CANCEL_DEEP
             else -> return
         }
-        if (currentCapabilities().ancImplementation == AncImplementation.COMPATIBLE) {
+        var swapped = false
+        if (caps.ancImplementation == AncImplementation.COMPATIBLE) {
             packet = when (mode) {
                 1 -> Enums.ANC_NOISE_CANCEL
                 2 -> Enums.ANC_OFF
                 else -> packet
             }
+            swapped = true
         }
+        Log.i(TAG, "setANCMode: packet payload=${packet.copyOfRange(9, packet.size).joinToString(" ") { "%02X".format(it) }} swapped=$swapped")
         changeUIAncStatus(mode)
         CoroutineScope(Dispatchers.IO).launch {
             sendPacketSafe(packet, "anc control")
