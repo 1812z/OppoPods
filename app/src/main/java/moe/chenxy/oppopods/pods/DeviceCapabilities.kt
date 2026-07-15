@@ -17,6 +17,8 @@ private val SPATIAL_SOUND_SWITCH_SUPPORTED_DEVICES = arrayOf(
 
 private val LEGACY_ANC_DEVICES = arrayOf(
     "OPPO Enco Air2 Pro",
+    "OPPO Enco Air 4",
+    "OPPO Enco Air4",
 )
 
 data class DeviceCapabilities(
