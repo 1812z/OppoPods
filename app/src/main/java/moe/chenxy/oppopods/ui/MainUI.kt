@@ -48,13 +48,13 @@ import moe.chenxy.oppopods.R
 import moe.chenxy.oppopods.config.ConfigManager
 import moe.chenxy.oppopods.config.PodImagePrefs
 import moe.chenxy.oppopods.config.PodImageResource
-import moe.chenxy.oppopods.pods.GameModeImplementation
 import moe.chenxy.oppopods.pods.NoiseControlMode
+import moe.chenxy.oppopods.pods.EqDevicePreset
 import moe.chenxy.oppopods.pods.WearState
 import moe.chenxy.oppopods.pods.WearStatus
 import moe.chenxy.oppopods.pods.detectDeviceCapabilities
 import moe.chenxy.oppopods.ui.pages.AboutPage
-import moe.chenxy.oppopods.ui.pages.DeviceCapabilitiesPage
+import moe.chenxy.oppopods.ui.pages.EqualizerPage
 import moe.chenxy.oppopods.ui.pages.RfcommDebugPage
 import moe.chenxy.oppopods.ui.pages.ThemeSettingsPage
 import moe.chenxy.oppopods.utils.RootManager
@@ -64,6 +64,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -82,7 +84,7 @@ sealed interface Screen : NavKey {
     data object Main : Screen
     data object About : Screen
     data object Theme : Screen
-    data object DeviceCapabilities : Screen
+    data object Equalizer : Screen
     data object RfcommDebug : Screen
 }
 
@@ -145,13 +147,6 @@ fun MainUI(
     val prefs = remember { context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE) }
     val appConfig = remember { ConfigManager.refreshFromPrefs(prefs) }
     val autoGameMode = remember { mutableStateOf(prefs.getBoolean("auto_game_mode", false)) }
-    val gameModeImplementation = remember {
-        mutableStateOf(
-            GameModeImplementation.fromPreference(
-                prefs.getString(GameModeImplementation.PREF_KEY, null)
-            )
-        )
-    }
     val notificationClickAction = remember { mutableStateOf(appConfig.notificationClickAction) }
     val moreClickAction = remember { mutableStateOf(appConfig.moreClickAction) }
     val desktopIconHidden = remember { mutableStateOf(isLauncherIconHidden(context)) }
@@ -161,11 +156,9 @@ fun MainUI(
     val islandShowTimings = remember { mutableStateOf(appConfig.islandShowTimings) }
     val spatialAudioMode = remember { mutableStateOf(prefs.getInt("spatial_audio_mode", ConfigManager.SPATIAL_AUDIO_OFF)) }
     val eqPreset = remember { mutableStateOf(-1) }
+    val eqDevicePresets = remember { mutableStateOf<List<EqDevicePreset>>(emptyList()) }
     val earphonePrefs = remember { mutableStateOf(PodImagePrefs.load(prefs)) }
-    val adaptiveCapabilityOverride = remember { mutableStateOf(appConfig.adaptiveCapabilityOverride) }
-    val spatialAudioCapabilityOverride = remember { mutableStateOf(appConfig.spatialAudioCapabilityOverride) }
-    val spatialSoundSwitchCapabilityOverride = remember { mutableStateOf(appConfig.spatialSoundSwitchCapabilityOverride) }
-    val ancImplementationCapabilityOverride = remember { mutableStateOf(appConfig.ancImplementationCapabilityOverride) }
+    val productId = remember { mutableStateOf<String?>(null) }
 
     val canShowDetailPage = hookConnected.value
     val showEarphoneDetail = canShowDetailPage && !showDevicePicker
@@ -177,11 +170,9 @@ fun MainUI(
     val displayDualDeviceConnection = dualDeviceConnection.value
     val displayTitle = mainTitle.value.takeIf { it.isNotBlank() && hookConnected.value } ?: mainTitle.value
     val displayCapabilities = detectDeviceCapabilities(
+        context = context,
         deviceName = displayTitle,
-        adaptiveOverride = adaptiveCapabilityOverride.value,
-        spatialAudioOverride = spatialAudioCapabilityOverride.value,
-        spatialSoundSwitchOverride = spatialSoundSwitchCapabilityOverride.value,
-        ancImplementationOverride = ancImplementationCapabilityOverride.value,
+        productId = productId.value,
     )
 
     LaunchedEffect(displayTitle, displayCapabilities) {
@@ -275,6 +266,12 @@ fun MainUI(
 
                     OppoPodsAction.ACTION_PODS_EQ_PRESET_CHANGED -> {
                         eqPreset.value = p1.getIntExtra("preset", -1)
+                        eqDevicePresets.value = runCatching {
+                            Json.decodeFromString(
+                                ListSerializer(EqDevicePreset.serializer()),
+                                p1.getStringExtra(OppoPodsAction.EXTRA_EQ_ENTRIES_JSON).orEmpty(),
+                            )
+                        }.getOrDefault(emptyList())
                     }
 
                     OppoPodsAction.ACTION_PODS_DUAL_DEVICE_CONNECTION_CHANGED -> {
@@ -285,6 +282,7 @@ fun MainUI(
                         val deviceName = p1.getStringExtra("device_name")
                         val shouldOpenEarphones = connectingDeviceAddress != null || !hasAppliedDefaultTab
                         connectedDeviceAddress = p1.getStringExtra("address") ?: connectedDeviceAddress
+                        productId.value = p1.getStringExtra("product_id") ?: productId.value
                         connectingDeviceAddress = null
                         mainTitle.value = deviceName ?: ""
                         earphonePrefs.value = PodImagePrefs.upsertConnected(
@@ -309,6 +307,7 @@ fun MainUI(
                         hookConnectionState = p1.getStringExtra("state") ?: hookConnectionState
                         if (hookConnectionState == "disconnected") {
                             connectedDeviceAddress = ""
+                            productId.value = null
                             mainTitle.value = ""
                             hookConnected.value = false
                         } else if (hookConnected.value) {
@@ -323,6 +322,7 @@ fun MainUI(
                     OppoPodsAction.ACTION_PODS_DISCONNECTED -> {
                         mainTitle.value = ""
                         connectedDeviceAddress = ""
+                        productId.value = null
                         hookConnectionState = "disconnected"
                         hookConnected.value = false
                     }
@@ -491,6 +491,39 @@ fun MainUI(
         }
     }
 
+    fun saveEqPreset(
+        id: Int,
+        name: String,
+        frequencies: List<Int>,
+        gains: List<Int>,
+        minValue: Int,
+        maxValue: Int,
+    ) {
+        Intent(OppoPodsAction.ACTION_EQ_PRESET_SAVE).apply {
+            putExtra("id", id)
+            putExtra("name", name)
+            putIntegerArrayListExtra("frequencies", ArrayList(frequencies))
+            putIntegerArrayListExtra("gains", ArrayList(gains))
+            putExtra("min_value", minValue)
+            putExtra("max_value", maxValue)
+            setPackage("com.android.bluetooth")
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            context.sendBroadcast(this)
+        }
+    }
+
+    fun deleteEqPreset(entry: EqDevicePreset) {
+        Intent(OppoPodsAction.ACTION_EQ_PRESET_DELETE).apply {
+            putExtra(
+                OppoPodsAction.EXTRA_EQ_ENTRIES_JSON,
+                Json.encodeToString(ListSerializer(EqDevicePreset.serializer()), listOf(entry)),
+            )
+            setPackage("com.android.bluetooth")
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            context.sendBroadcast(this)
+        }
+    }
+
     fun setDualDeviceConnection(enabled: Boolean) {
         dualDeviceConnection.value = enabled
         Intent(OppoPodsAction.ACTION_DUAL_DEVICE_CONNECTION_SET).apply {
@@ -643,11 +676,14 @@ fun MainUI(
                 displayTransparencyVocalEnhancement = displayTransparencyVocalEnhancement,
                 onTransparencyVocalEnhancementChange = { setTransparencyVocalEnhancement(it) },
                 displayGameMode = displayGameMode,
+                gameModeSupported = displayCapabilities.gameModeSupported,
                 onGameModeChange = { setGameMode(it) },
                 spatialAudioMode = spatialAudioMode.value,
                 onSpatialAudioModeChange = { setSpatialAudioMode(it) },
-                eqPreset = eqPreset.value,
-                onEqPresetChange = { setEqPreset(it) },
+                equalizerVisible = displayCapabilities.eqPresets.isNotEmpty() ||
+                    displayCapabilities.customEqSupported,
+                dualDeviceSupported = displayCapabilities.dualDeviceSupported,
+                onOpenEqualizer = { backStack.add(Screen.Equalizer) },
                 displayDualDeviceConnection = displayDualDeviceConnection,
                 onDualDeviceConnectionChange = { setDualDeviceConnection(it) },
                 spatialAudioSupported = displayCapabilities.spatialAudioSupported,
@@ -703,19 +739,6 @@ fun MainUI(
                         context.sendBroadcast(this)
                     }
                 },
-                gameModeImplementation = gameModeImplementation,
-                onGameModeImplementationChange = {
-                    gameModeImplementation.value = it
-                    prefs.edit()
-                        .putString(GameModeImplementation.PREF_KEY, it.preferenceValue)
-                        .apply()
-                    Intent(OppoPodsAction.ACTION_GAME_MODE_IMPLEMENTATION_CHANGED).apply {
-                        setPackage("com.android.bluetooth")
-                        putExtra(GameModeImplementation.PREF_KEY, it.preferenceValue)
-                        addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                        context.sendBroadcast(this)
-                    }
-                },
                 notificationClickAction = notificationClickAction,
                 onNotificationClickActionChange = {
                     notificationClickAction.value = it
@@ -727,10 +750,6 @@ fun MainUI(
                     moreClickAction.value = it
                     ConfigManager.updateMoreClickAction(prefs, xposedService, it)
                 },
-                adaptiveCapabilityOverride = adaptiveCapabilityOverride,
-                spatialAudioCapabilityOverride = spatialAudioCapabilityOverride,
-                spatialSoundSwitchCapabilityOverride = spatialSoundSwitchCapabilityOverride,
-                onOpenDeviceCapabilities = { backStack.add(Screen.DeviceCapabilities) },
                 onOpenRfcommDebug = { backStack.add(Screen.RfcommDebug) },
                 fakeDeviceId = fakeDeviceId,
                 onFakeDeviceIdChange = {
@@ -828,71 +847,42 @@ fun MainUI(
                 }
             }
         }
-        entry<Screen.DeviceCapabilities> {
-            val capabilitiesScrollBehavior = MiuixScrollBehavior(rememberTopAppBarState())
-
+        entry<Screen.Equalizer> {
+            val equalizerScrollBehavior = MiuixScrollBehavior(rememberTopAppBarState())
             Scaffold(
                 topBar = {
                     TopAppBar(
-                        title = stringResource(R.string.device_capabilities),
-                        largeTitle = stringResource(R.string.device_capabilities),
-                        scrollBehavior = capabilitiesScrollBehavior,
+                        title = stringResource(R.string.eq_preset_title),
+                        largeTitle = stringResource(R.string.eq_preset_title),
+                        scrollBehavior = equalizerScrollBehavior,
                         navigationIcon = {
                             IconButton(onClick = { backStack.removeLast() }) {
                                 Icon(imageVector = MiuixIcons.Back, contentDescription = "Back")
                             }
-                        }
+                        },
                     )
-                }
+                },
             ) { padding ->
-                Box(
+                EqualizerPage(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(backgroundColor)
-                        .padding(padding),
-                ) {
-                    DeviceCapabilitiesPage(
-                        modifier = Modifier
-                            .overScrollVertical()
-                            .nestedScroll(capabilitiesScrollBehavior.nestedScrollConnection),
-                        contentPadding = PaddingValues(bottom = pageBottomContentPadding),
-                        adaptiveCapabilityOverride = adaptiveCapabilityOverride,
-                        onAdaptiveCapabilityOverrideChange = {
-                            adaptiveCapabilityOverride.value = it
-                            ConfigManager.updateAdaptiveCapabilityOverride(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                            if (!detectDeviceCapabilities(
-                                    deviceName = displayTitle,
-                                    adaptiveOverride = it,
-                                    spatialAudioOverride = spatialAudioCapabilityOverride.value,
-                                    spatialSoundSwitchOverride = spatialSoundSwitchCapabilityOverride.value,
-                                    ancImplementationOverride = ancImplementationCapabilityOverride.value,
-                                ).adaptiveSupported &&
-                                displayAnc == NoiseControlMode.ADAPTIVE
-                            ) {
-                                setAncMode(NoiseControlMode.NOISE_CANCELLATION)
-                            }
-                        },
-                        spatialAudioCapabilityOverride = spatialAudioCapabilityOverride,
-                        onSpatialAudioCapabilityOverrideChange = {
-                            spatialAudioCapabilityOverride.value = it
-                            ConfigManager.updateSpatialAudioCapabilityOverride(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                        },
-                        spatialSoundSwitchCapabilityOverride = spatialSoundSwitchCapabilityOverride,
-                        onSpatialSoundSwitchCapabilityOverrideChange = {
-                            spatialSoundSwitchCapabilityOverride.value = it
-                            ConfigManager.updateSpatialSoundSwitchCapabilityOverride(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                        },
-                        ancImplementationCapabilityOverride = ancImplementationCapabilityOverride,
-                        onAncImplementationCapabilityOverrideChange = {
-                            ancImplementationCapabilityOverride.value = it
-                            ConfigManager.updateAncImplementationCapabilityOverride(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                        },
-                    )
-                }
+                        .overScrollVertical()
+                        .nestedScroll(equalizerScrollBehavior.nestedScrollConnection),
+                    contentPadding = PaddingValues(
+                        top = padding.calculateTopPadding(),
+                        bottom = pageBottomContentPadding,
+                    ),
+                    builtInPresets = displayCapabilities.eqPresets,
+                    devicePresets = eqDevicePresets.value,
+                    selectedId = eqPreset.value,
+                    customEqSupported = displayCapabilities.customEqSupported,
+                    customEqFrequencies = displayCapabilities.customEqFrequencies,
+                    customEqMaxPresets = displayCapabilities.customEqMaxPresets,
+                    onSelectPreset = ::setEqPreset,
+                    onSavePreset = ::saveEqPreset,
+                    onDeletePreset = ::deleteEqPreset,
+                )
             }
         }
         entry<Screen.RfcommDebug> {

@@ -19,6 +19,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import moe.chenxy.oppopods.BuildConfig
 import moe.chenxy.oppopods.config.ConfigManager
 import moe.chenxy.oppopods.utils.MediaControl
@@ -64,15 +66,17 @@ object RfcommController {
     private var currentGameMode: Boolean = false
     private var currentTransparencyVocalEnhancement: Boolean = false
     private var currentSpatialAudioMode: Int = SpatialAudioMode.OFF
-    /** -1 = unknown; otherwise one of [EqPreset.ALL]. */
+    /** -1 = unknown; otherwise the device protocol index of the selected preset. */
     private var currentEqPreset: Int = -1
+    private var currentDeviceEqPresets: List<EqDevicePreset> = emptyList()
     private var currentDualDeviceConnection: Boolean = false
     private var autoGameModeEnabled: Boolean = false
-    private var gameModeImplementation: GameModeImplementation = GameModeImplementation.STANDARD
+    private var gameModeFeatureId: Int = GameModeFeature.MAIN
     private var lastGameModeStatusUpdateMs: Long = 0L
     private var lastKnownCaseBattery: Int = 0
     private var lastKnownCaseCharging: Boolean = false
     private var cachedDeviceName: String = ""
+    private var currentProductId: String? = null
     private var receiverRegistered = false
     private var routeScanStarted = false
     private var appUiActive = false
@@ -84,6 +88,7 @@ object RfcommController {
         val transparencyVocalEnhancement: Boolean,
         val address: String?,
         val deviceName: String?,
+        val productId: String?,
         val connected: Boolean,
         val connecting: Boolean,
         val reconnectPending: Boolean,
@@ -162,6 +167,12 @@ object RfcommController {
     private fun changeUIEqPreset(presetId: Int) {
         sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_EQ_PRESET_CHANGED) {
             this.putExtra("preset", presetId)
+            putExtra("preset_ids", currentCapabilities().eqPresets.map { it.id }.toIntArray())
+            putExtra("preset_names", currentCapabilities().eqPresets.map { it.name }.toTypedArray())
+            putExtra(
+                OppoPodsAction.EXTRA_EQ_ENTRIES_JSON,
+                Json.encodeToString(ListSerializer(EqDevicePreset.serializer()), currentDeviceEqPresets),
+            )
         }
     }
 
@@ -223,12 +234,6 @@ object RfcommController {
                 autoGameModeEnabled = intent.getBooleanExtra("enabled", autoGameModeEnabled)
                 Log.d(TAG, "Auto game mode synced: $autoGameModeEnabled")
             }
-            OppoPodsAction.ACTION_GAME_MODE_IMPLEMENTATION_CHANGED -> {
-                gameModeImplementation = GameModeImplementation.fromPreference(
-                    intent.getStringExtra(GameModeImplementation.PREF_KEY)
-                )
-                Log.d(TAG, "Game mode implementation synced: ${gameModeImplementation.preferenceValue}")
-            }
             OppoPodsAction.ACTION_TRANSPARENCY_VOCAL_ENHANCEMENT_SET -> {
                 val enabled = intent.getBooleanExtra("enabled", false)
                 setTransparencyVocalEnhancement(enabled)
@@ -239,7 +244,26 @@ object RfcommController {
             }
             OppoPodsAction.ACTION_EQ_PRESET_SET -> {
                 val preset = intent.getIntExtra("preset", -1)
-                if (preset in EqPreset.ALL) setEqPreset(preset)
+                if (preset >= 0) setEqPreset(preset)
+            }
+            OppoPodsAction.ACTION_EQ_PRESET_SAVE -> {
+                saveEqPreset(
+                    id = intent.getIntExtra("id", 0),
+                    name = intent.getStringExtra("name").orEmpty(),
+                    frequencies = intent.getIntegerArrayListExtra("frequencies")?.toList().orEmpty(),
+                    gains = intent.getIntegerArrayListExtra("gains")?.toList().orEmpty(),
+                    minValue = intent.getIntExtra("min_value", -6),
+                    maxValue = intent.getIntExtra("max_value", 6),
+                )
+            }
+            OppoPodsAction.ACTION_EQ_PRESET_DELETE -> {
+                val entries = runCatching {
+                    Json.decodeFromString(
+                        ListSerializer(EqDevicePreset.serializer()),
+                        intent.getStringExtra(OppoPodsAction.EXTRA_EQ_ENTRIES_JSON).orEmpty(),
+                    )
+                }.getOrDefault(emptyList())
+                entries.firstOrNull()?.let(::deleteEqPreset)
             }
             OppoPodsAction.ACTION_DUAL_DEVICE_CONNECTION_SET -> {
                 val enabled = intent.getBooleanExtra("enabled", false)
@@ -280,6 +304,7 @@ object RfcommController {
             transparencyVocalEnhancement = currentTransparencyVocalEnhancement,
             address = if (::mDevice.isInitialized) mDevice.address else null,
             deviceName = if (::mDevice.isInitialized) mDevice.name ?: cachedDeviceName else cachedDeviceName.takeIf { it.isNotEmpty() },
+            productId = currentProductId,
             connected = isConnected && socket != null,
             connecting = connectionJob?.isActive == true,
             reconnectPending = reconnectPending,
@@ -408,12 +433,14 @@ object RfcommController {
 
         if (shouldShowToast) {
             changeUIConnectionState("connected")
-            sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_CONNECTED) {
-                this.putExtra("address", mDevice.address)
-                this.putExtra("device_name", mDevice.name ?: cachedDeviceName)
-            }
-            sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_CONNECTED) {
-                putExtra("device_name", mDevice.name ?: cachedDeviceName)
+                    sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_CONNECTED) {
+                        this.putExtra("address", mDevice.address)
+                        this.putExtra("device_name", mDevice.name ?: cachedDeviceName)
+                        this.putExtra("product_id", currentProductId)
+                    }
+                    sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_CONNECTED) {
+                        putExtra("device_name", mDevice.name ?: cachedDeviceName)
+                        putExtra("product_id", currentProductId)
             }
             if (shouldShowIsland(ConfigManager.ISLAND_SHOW_TIMING_CONNECTED)) {
                 MiuiStrongToastUtil.showPodsBatteryToastByMiuiBt(mContext!!, batteryParams, mDevice)
@@ -473,17 +500,15 @@ object RfcommController {
         mDevice = device
         mPrefs = prefs
         cachedDeviceName = device.name ?: ""
+        currentProductId = null
+        gameModeFeatureId = currentCapabilities().gameModeFeatureId
         if (appRequested) {
             markAppUiActive()
         }
         autoGameModeEnabled = mPrefs.getBoolean("auto_game_mode", false)
-        gameModeImplementation = GameModeImplementation.fromPreference(
-            mPrefs.getString(GameModeImplementation.PREF_KEY, null)
-        )
         ConfigManager.refreshFromPrefs(mPrefs)
         Log.d(TAG, "Adaptive support initial: ${currentCapabilities().adaptiveSupported}")
         Log.d(TAG, "Auto game mode initial: $autoGameModeEnabled")
-        Log.d(TAG, "Game mode implementation initial: ${gameModeImplementation.preferenceValue}")
         Log.d(TAG, "RFCOMM UUID initial: $OPPO_RFCOMM_UUID")
 
         if (!receiverRegistered) {
@@ -494,10 +519,11 @@ object RfcommController {
                 this.addAction(OppoPodsAction.ACTION_REFRESH_STATUS)
                 this.addAction(OppoPodsAction.ACTION_GAME_MODE_SET)
                 this.addAction(OppoPodsAction.ACTION_AUTO_GAME_MODE_CHANGED)
-                this.addAction(OppoPodsAction.ACTION_GAME_MODE_IMPLEMENTATION_CHANGED)
                 this.addAction(OppoPodsAction.ACTION_TRANSPARENCY_VOCAL_ENHANCEMENT_SET)
                 this.addAction(OppoPodsAction.ACTION_SPATIAL_AUDIO_SET)
                 this.addAction(OppoPodsAction.ACTION_EQ_PRESET_SET)
+                this.addAction(OppoPodsAction.ACTION_EQ_PRESET_SAVE)
+                this.addAction(OppoPodsAction.ACTION_EQ_PRESET_DELETE)
                 this.addAction(OppoPodsAction.ACTION_DUAL_DEVICE_CONNECTION_SET)
                 this.addAction(OppoPodsAction.ACTION_CYCLE_ANC)
                 this.addAction(OppoPodsAction.ACTION_CONFIG_CHANGED)
@@ -608,6 +634,8 @@ object RfcommController {
                 startPacketReader(newSocket.inputStream)
 
                 delay(300)
+                sendPacketSafe(OppoPackets.buildQueryProductId(), "product id query")
+                delay(50)
                 // Ask the bud which notifications it can push; we subscribe to the
                 // advertised list (minus 0xFx debug channels) in handleOppoPacket.
                 sendPacketSafe(Enums.QUERY_NOTIFICATION_SUPPORT)
@@ -702,6 +730,25 @@ object RfcommController {
     private fun handleOppoPacket(packet: ByteArray) {
         Log.v(TAG, "Received: ${packet.toHexString(HexFormat.UpperCase)}")
 
+        ProductIdParser.parse(packet)?.let { productId ->
+            currentProductId = productId
+            val model = mContext?.let { DeviceModelRegistry.byProductId(it, productId) }
+            gameModeFeatureId = currentCapabilities().gameModeFeatureId
+            Log.d(TAG, "Product id received: $productId, model=${model?.modelName ?: "unknown"}")
+            if (::mDevice.isInitialized && isConnected) {
+                sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_CONNECTED) {
+                    putExtra("address", mDevice.address)
+                    putExtra("device_name", mDevice.name ?: cachedDeviceName)
+                    putExtra("product_id", productId)
+                }
+                sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_CONNECTED) {
+                    putExtra("device_name", mDevice.name ?: cachedDeviceName)
+                    putExtra("product_id", productId)
+                }
+            }
+            return
+        }
+
         // Subscribe handshake: the bud replies to QUERY_NOTIFICATION_SUPPORT with the
         // notification IDs it can push. Subscribe to all of them except the 0xFx debug
         // channels (f1/f2/f3 push high-rate diagnostic frames that only add latency);
@@ -782,6 +829,13 @@ object RfcommController {
             return
         }
 
+        EqDetailsParser.parseAll(packet)?.let { entries ->
+            currentDeviceEqPresets = entries
+            entries.firstOrNull { it.selected }?.let { currentEqPreset = it.id }
+            changeUIEqPreset(currentEqPreset)
+            return
+        }
+
         // Try parse as ANC mode response
         val ancResult = AncModeParser.parse(packet, currentCapabilities().ancImplementation)
         if (ancResult != null) {
@@ -818,8 +872,20 @@ object RfcommController {
         // Try parse as batch query response for switch features (Cmd=0x810D).
         val switchFeatureStatus = GameModeParser.parseStatus(packet)
         if (switchFeatureStatus != null) {
-            val gameModeResult = switchFeatureStatus.enabledFor(gameModeImplementation)
+            val preferredGameMode = if (gameModeFeatureId == GameModeFeature.MAIN) {
+                switchFeatureStatus.mainEnabled
+            } else {
+                switchFeatureStatus.lowLatencyEnabled
+            }
+            val gameModeResult = preferredGameMode
+                ?: switchFeatureStatus.mainEnabled
+                ?: switchFeatureStatus.lowLatencyEnabled
             if (gameModeResult != null) {
+                if (switchFeatureStatus.mainEnabled == null && switchFeatureStatus.lowLatencyEnabled != null) {
+                    gameModeFeatureId = GameModeFeature.LOW_LATENCY
+                } else if (switchFeatureStatus.lowLatencyEnabled == null && switchFeatureStatus.mainEnabled != null) {
+                    gameModeFeatureId = GameModeFeature.MAIN
+                }
                 Log.d(TAG, "Game mode received: $gameModeResult")
                 lastGameModeStatusUpdateMs = SystemClock.elapsedRealtime()
                 currentGameMode = gameModeResult
@@ -878,7 +944,9 @@ object RfcommController {
         currentTransparencyVocalEnhancement = false
         currentSpatialAudioMode = SpatialAudioMode.OFF
         currentEqPreset = -1
+        currentDeviceEqPresets = emptyList()
         currentDualDeviceConnection = false
+        currentProductId = null
         lastKnownCaseBattery = 0
         lastKnownCaseCharging = false
         changeUIConnectionState("disconnected")
@@ -931,7 +999,7 @@ object RfcommController {
             if (!isConnected || mContext == null) return
 
             val attemptStartedMs = SystemClock.elapsedRealtime()
-            Log.d(TAG, "Auto game mode: enabling after connect, attempt=${attempt + 1}, implementation=$gameModeImplementation")
+            Log.d(TAG, "Auto game mode: enabling after connect, attempt=${attempt + 1}, feature=$gameModeFeatureId")
             currentGameMode = true
             changeUIGameModeStatus(true)
             sendGameModePackets(true, "auto game mode")
@@ -949,10 +1017,7 @@ object RfcommController {
     }
 
     private suspend fun sendGameModePackets(enabled: Boolean, requestReason: String? = null) {
-        Enums.gameModePackets(enabled, gameModeImplementation).forEachIndexed { index, packet ->
-            if (index > 0) delay(120)
-            sendPacketSafe(packet, if (index == 0) requestReason else null)
-        }
+        sendPacketSafe(Enums.gameModePacket(enabled, gameModeFeatureId), requestReason)
     }
 
     fun setTransparencyVocalEnhancement(enabled: Boolean) {
@@ -987,7 +1052,7 @@ object RfcommController {
     }
 
     fun setEqPreset(presetId: Int) {
-        if (presetId !in EqPreset.ALL) {
+        if (presetId < 0) {
             Log.w(TAG, "setEqPreset ignored: invalid preset $presetId")
             return
         }
@@ -1000,7 +1065,44 @@ object RfcommController {
         }
     }
 
+    private fun saveEqPreset(
+        id: Int,
+        name: String,
+        frequencies: List<Int>,
+        gains: List<Int>,
+        minValue: Int,
+        maxValue: Int,
+    ) {
+        val capabilities = currentCapabilities()
+        if (!capabilities.customEqSupported || name.isBlank()) return
+        CoroutineScope(Dispatchers.IO).launch {
+            sendPacketSafe(
+                OppoPackets.buildSaveEqualizer(
+                    id,
+                    name.trim(),
+                    frequencies.ifEmpty { capabilities.customEqFrequencies.ifEmpty { EqDefaults.FREQUENCIES } },
+                    gains,
+                    minValue,
+                    maxValue,
+                ),
+                "save EQ preset",
+            )
+            delay(450)
+            sendPacketSafe(OppoPackets.buildQueryAllEqualizers(), "query all EQ presets")
+        }
+    }
+
+    private fun deleteEqPreset(entry: EqDevicePreset) {
+        if (!currentCapabilities().customEqSupported || entry.id <= 0) return
+        CoroutineScope(Dispatchers.IO).launch {
+            sendPacketSafe(OppoPackets.buildDeleteEqualizer(entry), "delete EQ preset")
+            delay(450)
+            sendPacketSafe(OppoPackets.buildQueryAllEqualizers(), "query all EQ presets")
+        }
+    }
+
     fun setDualDeviceConnection(enabled: Boolean) {
+        if (!currentCapabilities().dualDeviceSupported) return
         val packet = Enums.dualDeviceConnectionPacket(enabled)
         Log.i(TAG, "setDualDeviceConnection: $enabled, packet=${packet.toHexString(HexFormat.UpperCase)}")
         currentDualDeviceConnection = enabled
@@ -1023,11 +1125,9 @@ object RfcommController {
 
     private fun currentCapabilities(): DeviceCapabilities {
         return detectDeviceCapabilities(
+            context = mContext,
             deviceName = if (::mDevice.isInitialized) mDevice.name ?: cachedDeviceName else cachedDeviceName,
-            adaptiveOverride = ConfigManager.adaptiveCapabilityOverride(),
-            spatialAudioOverride = ConfigManager.spatialAudioCapabilityOverride(),
-            spatialSoundSwitchOverride = ConfigManager.spatialSoundSwitchCapabilityOverride(),
-            ancImplementationOverride = ConfigManager.ancImplementationCapabilityOverride(),
+            productId = currentProductId,
         )
     }
 
@@ -1086,6 +1186,10 @@ object RfcommController {
         sendPacketSafe(Enums.QUERY_ANC, reason)
         delay(50)
         sendPacketSafe(Enums.QUERY_EQ, reason)
+        if (currentCapabilities().customEqSupported) {
+            delay(50)
+            sendPacketSafe(OppoPackets.buildQueryAllEqualizers(), reason)
+        }
     }
 
     fun disconnectAudio(context: Context, device: BluetoothDevice?) {

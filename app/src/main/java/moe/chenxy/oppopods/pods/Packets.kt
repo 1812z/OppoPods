@@ -27,6 +27,75 @@ object OppoPackets {
         payload.copyInto(packet, 9)
         return packet
     }
+
+    fun buildQueryProductId(): ByteArray = buildPacket(Cmd.QUERY_PRODUCT_ID)
+
+    fun buildQueryAllEqualizers(): ByteArray =
+        buildPacket(Cmd.QUERY_EQ_ALL, payload = byteArrayOf(0x01, 0x05))
+
+    fun buildSaveEqualizer(
+        id: Int,
+        name: String,
+        frequencies: List<Int>,
+        gains: List<Int>,
+        minValue: Int = -6,
+        maxValue: Int = 6,
+    ): ByteArray = buildPacket(
+        Cmd.SET_EQ_DETAIL,
+        payload = buildEqDetailPayload(
+            if (id > 0) 2 else 1,
+            id,
+            name,
+            frequencies,
+            gains,
+            minValue,
+            maxValue,
+        ),
+    )
+
+    fun buildDeleteEqualizer(entry: EqDevicePreset): ByteArray = buildPacket(
+        Cmd.SET_EQ_DETAIL,
+        payload = buildEqDetailPayload(
+            3,
+            entry.id,
+            entry.name,
+            entry.frequencies,
+            entry.gains,
+            entry.minValue,
+            entry.maxValue,
+        ),
+    )
+
+    private fun buildEqDetailPayload(
+        action: Int,
+        id: Int,
+        name: String,
+        frequencies: List<Int>,
+        gains: List<Int>,
+        minValue: Int,
+        maxValue: Int,
+    ): ByteArray {
+        val safeFrequencies = frequencies.ifEmpty { EqDefaults.FREQUENCIES }.take(32)
+        val nameBytes = name.toByteArray(Charsets.UTF_8).take(255).toByteArray()
+        val lower = minValue.coerceAtMost(maxValue).coerceIn(-128, 127)
+        val upper = maxValue.coerceAtLeast(lower).coerceIn(-128, 127)
+        val payload = ByteArray(6 + nameBytes.size + safeFrequencies.size * 3)
+        payload[0] = action.coerceIn(1, 3).toByte()
+        payload[1] = lower.toByte()
+        payload[2] = upper.toByte()
+        payload[3] = id.coerceIn(0, 255).toByte()
+        payload[4] = nameBytes.size.toByte()
+        nameBytes.copyInto(payload, 5)
+        payload[5 + nameBytes.size] = safeFrequencies.size.toByte()
+        safeFrequencies.forEachIndexed { index, frequency ->
+            val offset = 6 + nameBytes.size + index * 3
+            val value = frequency.coerceIn(0, 0xFFFF)
+            payload[offset] = value.toByte()
+            payload[offset + 1] = (value shr 8).toByte()
+            payload[offset + 2] = (gains.getOrNull(index) ?: 0).coerceIn(lower, upper).toByte()
+        }
+        return payload
+    }
 }
 
 /**
@@ -123,23 +192,14 @@ object SpatialAudioMode {
     const val HEAD_TRACKING = 0x02
 }
 
-/**
- * Master EQ preset IDs for OPPO Enco X3 ("大师调音" / Master Tuning).
- * Values are non-contiguous because other products in the same protocol family
- * use the missing slots (4..6).
- */
-object EqPreset {
-    const val AUTHENTIC = 0  // 至臻原音 (Authentic)
-    const val DETAIL = 1     // 高清解析 (Detail)
-    const val VOCAL = 2      // 纯享人声 (Vocal)
-    const val BASS = 3       // 澎湃低音 (Bass)
-    const val DYNAUDIO = 7   // 丹拿特调 (Dynaudio tuned)
-    /** All supported presets, in UI display order. */
-    val ALL: List<Int> = listOf(AUTHENTIC, DETAIL, VOCAL, BASS, DYNAUDIO)
-}
-
 /** Protocol command codes. */
 object Cmd {
+    /** Query product id (getRemotePID). */
+    const val QUERY_PRODUCT_ID = 0x0103
+    /** Product id response. */
+    const val PRODUCT_ID_RESPONSE = 0x8103
+    const val QUERY_EQ_ALL = 0x0122
+    const val SET_EQ_DETAIL = 0x0418
     /** Set ANC mode */
     const val SET_ANC = 0x0404
     /** Set game mode */
@@ -184,6 +244,61 @@ object Cmd {
     const val NOTIFICATION_SUPPORT_RESPONSE = 0x8200
     /** Subscribe to N notification IDs: payload `[count, id1, id2, …]` (handshake step 2). */
     const val REGISTER_MULTI_NOTIFICATION = 0x0205
+}
+
+object EqDetailsParser {
+    fun parseAll(data: ByteArray): List<EqDevicePreset>? {
+        if (data.size < 11 || data[0] != 0xAA.toByte()) return null
+        val cmd = (data[4].toInt() and 0xFF) or ((data[5].toInt() and 0xFF) shl 8)
+        if (cmd != (Cmd.QUERY_EQ_ALL or 0x8000)) return null
+        val payLen = (data[7].toInt() and 0xFF) or ((data[8].toInt() and 0xFF) shl 8)
+        val end = 9 + payLen
+        if (payLen < 2 || data.size < end || data[9].toInt() != 0) return null
+        val count = data[10].toInt() and 0xFF
+        var position = 11
+        val result = mutableListOf<EqDevicePreset>()
+        repeat(count) {
+            if (position + 5 > end) return result
+            val selected = data[position].toInt() != 0
+            val minValue = data[position + 1].toInt()
+            val maxValue = data[position + 2].toInt()
+            val id = data[position + 3].toInt() and 0xFF
+            val nameLength = data[position + 4].toInt() and 0xFF
+            position += 5
+            if (position + nameLength >= end) return result
+            val name = data.copyOfRange(position, position + nameLength).toString(Charsets.UTF_8).trim()
+            position += nameLength
+            val frequencyCount = data[position].toInt() and 0xFF
+            position++
+            if (position + frequencyCount * 3 > end) return result
+            val frequencies = ArrayList<Int>(frequencyCount)
+            val gains = ArrayList<Int>(frequencyCount)
+            repeat(frequencyCount) { index ->
+                val offset = position + index * 3
+                frequencies += (data[offset].toInt() and 0xFF) or
+                    ((data[offset + 1].toInt() and 0xFF) shl 8)
+                gains += data[offset + 2].toInt()
+            }
+            position += frequencyCount * 3
+            result += EqDevicePreset(id, name, selected, minValue, maxValue, frequencies, gains)
+        }
+        return result
+    }
+}
+
+/** Parses the exact six-digit product id returned by command 0x8103. */
+object ProductIdParser {
+    fun parse(data: ByteArray): String? {
+        if (data.size < 13 || data[0] != 0xAA.toByte()) return null
+        val cmd = (data[4].toInt() and 0xFF) or ((data[5].toInt() and 0xFF) shl 8)
+        if (cmd != Cmd.PRODUCT_ID_RESPONSE) return null
+        val payLen = (data[7].toInt() and 0xFF) or ((data[8].toInt() and 0xFF) shl 8)
+        if (payLen != 4 || data.size < 9 + payLen || data[9].toInt() != 0) return null
+        val id = (data[10].toInt() and 0xFF) or
+            ((data[11].toInt() and 0xFF) shl 8) or
+            ((data[12].toInt() and 0xFF) shl 16)
+        return "%06X".format(id)
+    }
 }
 
 /** Pre-built packets. */
@@ -285,16 +400,10 @@ object Enums {
         cmd = Cmd.SET_GAME_MODE, payload = byteArrayOf(GameModeFeature.LOW_LATENCY.toByte(), 0x00)
     )
 
-    fun gameModePackets(enabled: Boolean, implementation: GameModeImplementation): List<ByteArray> {
-        return when (implementation) {
-            GameModeImplementation.STANDARD -> listOf(if (enabled) GAME_MODE_ON else GAME_MODE_OFF)
-            GameModeImplementation.COMPATIBLE -> if (enabled) {
-                listOf(GAME_MODE_ON, GAME_LOW_LATENCY_ON)
-            } else {
-                listOf(GAME_LOW_LATENCY_OFF, GAME_MODE_OFF)
-            }
-        }
-    }
+    fun gameModePacket(enabled: Boolean, featureId: Int): ByteArray = OppoPackets.buildPacket(
+        cmd = Cmd.SET_GAME_MODE,
+        payload = byteArrayOf(featureId.toByte(), if (enabled) 0x01 else 0x00),
+    )
 
     /** Set spatial audio: AA 08 00 00 22 04 F0 01 00 [mode]. */
     fun spatialAudioPacket(mode: Int): ByteArray = OppoPackets.buildPacket(
@@ -508,12 +617,12 @@ object EqPresetParser {
         return when (cmd) {
             Cmd.EQ_PRESET_NOTIFY -> {
                 if (payLen < 1) return null
-                (data[9].toInt() and 0xFF).takeIf { it in EqPreset.ALL }
+                data[9].toInt() and 0xFF
             }
             Cmd.EQ_PRESET_RESPONSE -> {
                 if (payLen < 2 || data.size < 11) return null
                 // payload[0] = status (0 on success), payload[1] = preset
-                (data[10].toInt() and 0xFF).takeIf { it in EqPreset.ALL }
+                data[10].toInt() and 0xFF
             }
             else -> null
         }
@@ -674,18 +783,7 @@ object GameModeParser {
         val mainEnabled: Boolean?,
         val lowLatencyEnabled: Boolean?,
         val dualDeviceConnectionEnabled: Boolean? = null
-    ) {
-        fun enabledFor(implementation: GameModeImplementation): Boolean? {
-            return when (implementation) {
-                GameModeImplementation.STANDARD -> mainEnabled
-                GameModeImplementation.COMPATIBLE -> lowLatencyEnabled ?: mainEnabled
-            }
-        }
-    }
-
-    fun parse(data: ByteArray, implementation: GameModeImplementation = GameModeImplementation.STANDARD): Boolean? {
-        return parseStatus(data)?.enabledFor(implementation)
-    }
+    )
 
     fun parseStatus(data: ByteArray): Status? {
         if (data.size < 9) return null

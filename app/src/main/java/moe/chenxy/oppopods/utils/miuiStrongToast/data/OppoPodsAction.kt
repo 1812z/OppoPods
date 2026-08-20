@@ -24,12 +24,13 @@ object OppoPodsAction {
     const val ACTION_PODS_SPATIAL_AUDIO_CHANGED = "chen.action.oppopods.pods_spatial_audio_changed"
     const val ACTION_EQ_PRESET_SET = "chen.action.oppopods.eq_preset_set"
     const val ACTION_PODS_EQ_PRESET_CHANGED = "chen.action.oppopods.pods_eq_preset_changed"
+    const val ACTION_EQ_PRESET_SAVE = "chen.action.oppopods.eq_preset_save"
+    const val ACTION_EQ_PRESET_DELETE = "chen.action.oppopods.eq_preset_delete"
     const val ACTION_PODS_SMART_ANC_LEVEL_CHANGED = "chen.action.oppopods.pods_smart_anc_level_changed"
     const val ACTION_DUAL_DEVICE_CONNECTION_SET = "chen.action.oppopods.dual_device_connection_set"
     const val ACTION_PODS_DUAL_DEVICE_CONNECTION_CHANGED = "chen.action.oppopods.pods_dual_device_connection_changed"
     const val ACTION_CYCLE_ANC = "chen.action.oppopods.cycle_anc"
     const val ACTION_AUTO_GAME_MODE_CHANGED = "chen.action.oppopods.auto_game_mode_changed"
-    const val ACTION_GAME_MODE_IMPLEMENTATION_CHANGED = "chen.action.oppopods.game_mode_implementation_changed"
     const val ACTION_RFCOMM_LOG_CONNECT = "chen.action.oppopods.rfcomm_log_connect"
     const val ACTION_RFCOMM_LOG_DISCONNECT = "chen.action.oppopods.rfcomm_log_disconnect"
     const val ACTION_RFCOMM_LOG_CLEAR = "chen.action.oppopods.rfcomm_log_clear"
@@ -38,4 +39,5 @@ object OppoPodsAction {
     // Adaptive模式开关状态变更广播，用于跨进程同步偏好设置（App → com.android.bluetooth / com.xiaomi.bluetooth）
     const val ACTION_ADAPTIVE_MODE_CHANGED = "chen.action.oppopods.adaptive_mode_changed"
     const val ACTION_CONFIG_CHANGED = "chen.action.oppopods.config_changed"
+    const val EXTRA_EQ_ENTRIES_JSON = "eq_entries_json"
 }

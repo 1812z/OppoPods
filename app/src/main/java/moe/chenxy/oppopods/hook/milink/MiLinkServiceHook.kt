@@ -25,6 +25,7 @@ object MiLinkServiceHook : HookContext() {
     private const val PREFS_NAME = "oppopods_milink_state"
     private val knownOppoAddresses = linkedSetOf<String>()
     internal var context: Context? = null
+    private var currentProductId: String? = null
     private var receiverRegistered = false
     internal var currentAddress: String? = null
     private var currentName: String? = null
@@ -192,10 +193,12 @@ object MiLinkServiceHook : HookContext() {
                     OppoPodsAction.ACTION_PODS_CONNECTED -> {
                         currentAddress = intent.getStringExtra("address") ?: currentAddress
                         currentName = intent.getStringExtra("device_name") ?: currentName
+                        currentProductId = intent.getStringExtra("product_id") ?: currentProductId
                         currentAddress?.let { knownOppoAddresses.add(it.uppercase()) }
                     }
                     OppoPodsAction.ACTION_PODS_DISCONNECTED -> {
                         currentAddress = intent.getStringExtra("address") ?: currentAddress
+                        currentProductId = null
                     }
                     OppoPodsAction.ACTION_PODS_BATTERY_CHANGED -> {
                         currentAddress = intent.getStringExtra("address") ?: currentAddress
@@ -411,19 +414,11 @@ object MiLinkServiceHook : HookContext() {
     }
 
     private fun panelCapabilities() = detectDeviceCapabilities(
+        context = context,
         deviceName = backendDeviceName() ?: currentName.orEmpty(),
-        adaptiveOverride = ConfigManager.adaptiveCapabilityOverride(),
-        spatialAudioOverride = miLinkSpatialAudioOverride(),
-        spatialSoundSwitchOverride = ConfigManager.CAPABILITY_OVERRIDE_FORCE_DISABLED,
+        productId = runCatching { RfcommController.currentStatusSnapshot().productId }.getOrNull()
+            ?: currentProductId,
     )
-
-    private fun miLinkSpatialAudioOverride(): Int {
-        val direct = runCatching {
-            prefs.getInt(ConfigManager.PREF_KEY_SPATIAL_AUDIO_CAPABILITY_OVERRIDE, Int.MIN_VALUE)
-        }.getOrDefault(Int.MIN_VALUE)
-        return (direct.takeIf { it != Int.MIN_VALUE } ?: ConfigManager.spatialAudioCapabilityOverride())
-            .coerceIn(ConfigManager.CAPABILITY_OVERRIDE_AUTO, ConfigManager.CAPABILITY_OVERRIDE_FORCE_DISABLED)
-    }
 
     private fun backendDeviceName(): String? {
         return runCatching { RfcommController.currentStatusSnapshot().deviceName }

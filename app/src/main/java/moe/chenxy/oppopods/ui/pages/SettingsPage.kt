@@ -14,15 +14,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import moe.chenxy.oppopods.R
 import moe.chenxy.oppopods.config.ConfigManager
-import moe.chenxy.oppopods.pods.GameModeImplementation
 import moe.chenxy.oppopods.ui.AppLocale
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ArrowRight
 
 @Composable
 fun SettingsPage(
@@ -40,16 +42,10 @@ fun SettingsPage(
     onAppLanguageChange: (Int) -> Unit = {},
     autoGameMode: MutableState<Boolean> = mutableStateOf(false),
     onAutoGameModeChange: (Boolean) -> Unit = {},
-    gameModeImplementation: MutableState<GameModeImplementation> = mutableStateOf(GameModeImplementation.STANDARD),
-    onGameModeImplementationChange: (GameModeImplementation) -> Unit = {},
     notificationClickAction: MutableState<Int> = mutableStateOf(ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP),
     onNotificationClickActionChange: (Int) -> Unit = {},
     moreClickAction: MutableState<Int> = mutableStateOf(ConfigManager.MORE_CLICK_MODULE),
     onMoreClickActionChange: (Int) -> Unit = {},
-    adaptiveCapabilityOverride: MutableState<Int> = mutableStateOf(ConfigManager.CAPABILITY_OVERRIDE_AUTO),
-    spatialAudioCapabilityOverride: MutableState<Int> = mutableStateOf(ConfigManager.CAPABILITY_OVERRIDE_AUTO),
-    spatialSoundSwitchCapabilityOverride: MutableState<Int> = mutableStateOf(ConfigManager.CAPABILITY_OVERRIDE_AUTO),
-    onOpenDeviceCapabilities: () -> Unit = {},
     fakeDeviceId: MutableState<String> = mutableStateOf(ConfigManager.DEFAULT_FAKE_DEVICE_ID),
     onFakeDeviceIdChange: (String) -> Unit = {},
     onOpenTheme: () -> Unit = {},
@@ -116,21 +112,6 @@ fun SettingsPage(
         stringResource(R.string.click_action_system_settings),
         stringResource(R.string.click_action_module),
     )
-    val gameModeImplementationOptions = listOf(
-        stringResource(R.string.game_mode_implementation_standard),
-        stringResource(R.string.game_mode_implementation_compatible),
-    )
-    val adaptiveCapabilityText = capabilityOverrideLabel(adaptiveCapabilityOverride.value)
-    val spatialAudioCapabilityText = capabilityOverrideLabel(spatialAudioCapabilityOverride.value)
-    val spatialSoundCapabilityText = capabilityOverrideLabel(spatialSoundSwitchCapabilityOverride.value)
-    val deviceCapabilitySummary = listOf(
-        stringResource(R.string.adaptive_mode) to adaptiveCapabilityText,
-        stringResource(R.string.spatial_audio) to spatialAudioCapabilityText,
-        stringResource(R.string.spatial_sound) to spatialSoundCapabilityText,
-    ).joinToString(" / ") { (label, value) ->
-        "$label: $value"
-    }
-
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -146,6 +127,12 @@ fun SettingsPage(
                     title = stringResource(R.string.theme_title),
                     summary = stringResource(R.string.theme_color_summary),
                     onClick = onOpenTheme,
+                    endActions = {
+                        Icon(
+                            imageVector = MiuixIcons.ArrowRight,
+                            contentDescription = null,
+                        )
+                    },
                 )
             }
         }
@@ -177,11 +164,6 @@ fun SettingsPage(
 
         item {
             Card(modifier = Modifier.padding(top = 12.dp)) {
-                BasicComponent(
-                    title = stringResource(R.string.device_capabilities),
-                    summary = deviceCapabilitySummary,
-                    onClick = onOpenDeviceCapabilities,
-                )
                 OverlayDropdownPreference(
                     title = stringResource(R.string.island_mode),
                     summary = stringResource(R.string.island_mode_summary),
@@ -201,14 +183,6 @@ fun SettingsPage(
                     title = stringResource(R.string.auto_game_mode),
                     checked = autoGameMode.value,
                     onCheckedChange = { onAutoGameModeChange(it) }
-                )
-                OverlayDropdownPreference(
-                    title = stringResource(R.string.game_mode_implementation),
-                    items = gameModeImplementationOptions,
-                    selectedIndex = GameModeImplementation.selectedIndexOf(gameModeImplementation.value),
-                    onSelectedIndexChange = {
-                        onGameModeImplementationChange(GameModeImplementation.fromSelectedIndex(it))
-                    }
                 )
                 OverlayDropdownPreference(
                     title = stringResource(R.string.notification_click_action),
@@ -245,16 +219,15 @@ fun SettingsPage(
                 BasicComponent(
                     title = stringResource(R.string.about),
                     summary = "OppoPods-Enhanced",
-                    onClick = onOpenAbout
+                    onClick = onOpenAbout,
+                    endActions = {
+                        Icon(
+                            imageVector = MiuixIcons.ArrowRight,
+                            contentDescription = null,
+                        )
+                    },
                 )
             }
         }
     }
-}
-
-@Composable
-private fun capabilityOverrideLabel(value: Int): String = when (value) {
-    ConfigManager.CAPABILITY_OVERRIDE_FORCE_ENABLED -> stringResource(R.string.capability_force_enabled)
-    ConfigManager.CAPABILITY_OVERRIDE_FORCE_DISABLED -> stringResource(R.string.capability_force_disabled)
-    else -> stringResource(R.string.capability_auto)
 }

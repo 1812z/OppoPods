@@ -23,6 +23,7 @@ import moe.chenxy.oppopods.config.ConfigManager
 import moe.chenxy.oppopods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.oppopods.utils.miuiStrongToast.data.OppoPodsAction
 import moe.chenxy.oppopods.R
+import moe.chenxy.oppopods.pods.RfcommController
 import moe.chenxy.oppopods.pods.detectDeviceCapabilities
 
 @SuppressLint("MissingPermission")
@@ -265,14 +266,12 @@ object MiBluetoothToastHook : HookContext() {
                                 // 同步耳机实际 ANC 状态到本地缓存，确保下次循环切换时状态准确
                                 localAncMode = p1.getIntExtra("status", 1)
                             } else if (p1?.action == OppoPodsAction.ACTION_CYCLE_ANC) {
+                                val snapshot = runCatching { RfcommController.currentStatusSnapshot() }.getOrNull()
                                 val capabilities = detectDeviceCapabilities(
-                                    deviceName = p1.getStringExtra("device_name").orEmpty(),
-                                    adaptiveOverride = prefs.getInt(
-                                        ConfigManager.PREF_KEY_ADAPTIVE_CAPABILITY_OVERRIDE,
-                                        ConfigManager.CAPABILITY_OVERRIDE_AUTO
-                                    ),
-                                    spatialAudioOverride = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
-                                    spatialSoundSwitchOverride = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
+                                    context = p0,
+                                    deviceName = snapshot?.deviceName
+                                        ?: p1.getStringExtra("device_name").orEmpty(),
+                                    productId = snapshot?.productId,
                                 )
                                 val cycle = if (capabilities.adaptiveSupported) {
                                     listOf(2, 4, 3, 1)
@@ -294,6 +293,8 @@ object MiBluetoothToastHook : HookContext() {
                     intentFilter.addAction("chen.action.oppopods.updatepodsnotification")
                     intentFilter.addAction("chen.action.oppopods.cancelpodsnotification")
                     intentFilter.addAction(OppoPodsAction.ACTION_CYCLE_ANC)
+                    intentFilter.addAction(OppoPodsAction.ACTION_PODS_CONNECTED)
+                    intentFilter.addAction(OppoPodsAction.ACTION_PODS_DISCONNECTED)
                     // 监听耳机实际 ANC 状态变更广播，保持 localAncMode 与 RfcommController 同步
                     intentFilter.addAction(OppoPodsAction.ACTION_PODS_ANC_CHANGED)
                     context.registerReceiver(broadcastReceiver, intentFilter,

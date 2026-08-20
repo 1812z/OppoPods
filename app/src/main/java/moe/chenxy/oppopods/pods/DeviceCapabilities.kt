@@ -1,100 +1,67 @@
 package moe.chenxy.oppopods.pods
 
-import moe.chenxy.oppopods.config.ConfigManager
-
-private val ADAPTIVE_SUPPORTED_DEVICES = arrayOf(
-    "OPPO Enco Free4",
-)
-
-private val SPATIAL_AUDIO_SUPPORTED_DEVICES = arrayOf(
-    "OPPO Enco X3",
-)
-
-private val SPATIAL_SOUND_SWITCH_SUPPORTED_DEVICES = arrayOf(
-    "OPPO Enco Free4",
-    "OPPO Enco Air5",
-)
-
-private val LEGACY_ANC_DEVICES = arrayOf(
-    "OPPO Enco Air2 Pro",
-)
+import android.content.Context
 
 data class DeviceCapabilities(
     val adaptiveSupported: Boolean,
     val spatialAudioSupported: Boolean,
     val spatialSoundSwitchSupported: Boolean,
     val ancImplementation: AncImplementation,
+    val dualDeviceSupported: Boolean = false,
+    val customEqSupported: Boolean = false,
+    val eqPresets: List<EqPresetInfo> = emptyList(),
+    val customEqFrequencies: List<Int> = emptyList(),
+    val customEqMaxPresets: Int = 0,
+    val gameModeFeatureId: Int = GameModeFeature.LOW_LATENCY,
+    val gameModeSupported: Boolean = false,
 )
 
+@kotlinx.serialization.Serializable
+data class EqPresetInfo(
+    val id: Int,
+    val name: String,
+    val modeType: Int = -1,
+)
+
+@kotlinx.serialization.Serializable
+data class EqDevicePreset(
+    val id: Int,
+    val name: String,
+    val selected: Boolean = false,
+    val minValue: Int = -6,
+    val maxValue: Int = 6,
+    val frequencies: List<Int> = emptyList(),
+    val gains: List<Int> = emptyList(),
+)
+
+object EqDefaults {
+    val FREQUENCIES = listOf(62, 250, 1000, 4000, 8000, 16000)
+}
+
 fun detectDeviceCapabilities(
+    context: Context? = null,
     deviceName: String,
-    adaptiveOverride: Int = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
-    spatialAudioOverride: Int = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
-    spatialSoundSwitchOverride: Int = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
-    ancImplementationOverride: Int = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
+    productId: String? = null,
 ): DeviceCapabilities {
+    val detected = context?.let {
+        DeviceModelRegistry.byProductId(it, productId)
+            ?: DeviceModelRegistry.byDeviceName(it, deviceName)
+    }
     return DeviceCapabilities(
-        adaptiveSupported = resolveCapability(
-            override = adaptiveOverride,
-            autoDetected = isAdaptiveSupportedByName(deviceName),
-        ),
-        spatialAudioSupported = resolveCapability(
-            override = spatialAudioOverride,
-            autoDetected = isSpatialAudioSupportedByName(deviceName),
-        ),
-        spatialSoundSwitchSupported = resolveCapability(
-            override = spatialSoundSwitchOverride,
-            autoDetected = isSpatialSoundSwitchSupportedByName(deviceName),
-        ),
-        ancImplementation = resolveAncImplementation(
-            override = ancImplementationOverride,
-            autoDetected = isLegacyAncDeviceByName(deviceName)
-        )
+        adaptiveSupported = detected?.adaptiveSupported == true,
+        spatialAudioSupported = detected?.spatialAudioSupported == true,
+        spatialSoundSwitchSupported = detected?.spatialSoundSwitchSupported == true,
+        ancImplementation = if (detected?.legacyAnc == true) {
+            AncImplementation.COMPATIBLE
+        } else {
+            AncImplementation.STANDARD
+        },
+        dualDeviceSupported = detected?.dualDeviceSupported == true,
+        customEqSupported = detected?.customEqSupported == true,
+        eqPresets = detected?.eqPresets.orEmpty(),
+        customEqFrequencies = detected?.customEqFrequencies.orEmpty(),
+        customEqMaxPresets = detected?.customEqMaxPresets ?: 0,
+        gameModeFeatureId = detected?.gameModeFeatureId ?: GameModeFeature.LOW_LATENCY,
+        gameModeSupported = detected?.gameModeSupported == true,
     )
-}
-
-fun isAdaptiveSupportedByName(deviceName: String): Boolean {
-    return isDeviceInCapabilityList(deviceName, ADAPTIVE_SUPPORTED_DEVICES)
-}
-
-fun isSpatialAudioSupportedByName(deviceName: String): Boolean {
-    return isDeviceInCapabilityList(deviceName, SPATIAL_AUDIO_SUPPORTED_DEVICES)
-}
-
-fun isSpatialSoundSwitchSupportedByName(deviceName: String): Boolean {
-    return isDeviceInCapabilityList(deviceName, SPATIAL_SOUND_SWITCH_SUPPORTED_DEVICES)
-}
-
-fun isLegacyAncDeviceByName(deviceName: String): Boolean {
-    return isDeviceInCapabilityList(deviceName, LEGACY_ANC_DEVICES)
-}
-
-private fun resolveCapability(override: Int, autoDetected: Boolean): Boolean {
-    return when (override) {
-        ConfigManager.CAPABILITY_OVERRIDE_FORCE_ENABLED -> true
-        ConfigManager.CAPABILITY_OVERRIDE_FORCE_DISABLED -> false
-        else -> autoDetected
-    }
-}
-
-private fun resolveAncImplementation(override: Int, autoDetected: Boolean): AncImplementation {
-    return when (override) {
-        ConfigManager.CAPABILITY_OVERRIDE_FORCE_ENABLED -> AncImplementation.COMPATIBLE
-        ConfigManager.CAPABILITY_OVERRIDE_FORCE_DISABLED -> AncImplementation.STANDARD
-        else -> if (autoDetected) AncImplementation.COMPATIBLE else AncImplementation.STANDARD
-    }
-}
-
-private fun normalizeDeviceName(deviceName: String): String {
-    return deviceName.lowercase().filter { it.isLetterOrDigit() }
-}
-
-private fun isDeviceInCapabilityList(deviceName: String, supportedDevices: Array<String>): Boolean {
-    val normalizedName = normalizeDeviceName(deviceName)
-    if (normalizedName.isEmpty()) return false
-
-    return supportedDevices.any { supportedDevice ->
-        val normalizedSupportedDevice = normalizeDeviceName(supportedDevice)
-        normalizedSupportedDevice.isNotEmpty() && normalizedSupportedDevice in normalizedName
-    }
 }

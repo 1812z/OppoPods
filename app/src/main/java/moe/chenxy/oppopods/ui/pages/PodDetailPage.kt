@@ -37,7 +37,10 @@ import moe.chenxy.oppopods.ui.components.PodStatus
 import moe.chenxy.oppopods.utils.miuiStrongToast.data.BatteryParams
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
-import moe.chenxy.oppopods.pods.EqPreset
+import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ArrowRight
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
@@ -55,6 +58,7 @@ fun PodDetailPage(
     transparencyVocalEnhancement: Boolean = false,
     onTransparencyVocalEnhancementChange: (Boolean) -> Unit = {},
     gameMode: Boolean = false,
+    gameModeSupported: Boolean = false,
     onGameModeChange: (Boolean) -> Unit = {},
     spatialAudioMode: Int = ConfigManager.SPATIAL_AUDIO_OFF,
     onSpatialAudioModeChange: (Int) -> Unit = {},
@@ -63,8 +67,9 @@ fun PodDetailPage(
     spatialAudioSupported: Boolean = false,
     spatialSoundSupported: Boolean = false,
     adaptiveModeEnabled: Boolean = true,
-    eqPreset: Int = -1,
-    onEqPresetChange: (Int) -> Unit = {},
+    equalizerVisible: Boolean = false,
+    dualDeviceSupported: Boolean = false,
+    onOpenEqualizer: () -> Unit = {},
     boxImagePath: String? = null,
 ) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -116,6 +121,7 @@ fun PodDetailPage(
                     transparencyVocalEnhancement = transparencyVocalEnhancement,
                     onTransparencyVocalEnhancementChange = onTransparencyVocalEnhancementChange,
                     gameMode = gameMode,
+                    gameModeSupported = gameModeSupported,
                     onGameModeChange = onGameModeChange,
                     spatialAudioMode = spatialAudioMode,
                     onSpatialAudioModeChange = onSpatialAudioModeChange,
@@ -124,8 +130,9 @@ fun PodDetailPage(
                     spatialAudioSupported = spatialAudioSupported,
                     spatialSoundSupported = spatialSoundSupported,
                     adaptiveModeEnabled = adaptiveModeEnabled,
-                    eqPreset = eqPreset,
-                    onEqPresetChange = onEqPresetChange,
+                    equalizerVisible = equalizerVisible,
+                    dualDeviceSupported = dualDeviceSupported,
+                    onOpenEqualizer = onOpenEqualizer,
                     bottomContentPadding = bottomContentPadding
                 )
             }
@@ -158,6 +165,7 @@ fun PodDetailPage(
             transparencyVocalEnhancement = transparencyVocalEnhancement,
             onTransparencyVocalEnhancementChange = onTransparencyVocalEnhancementChange,
             gameMode = gameMode,
+            gameModeSupported = gameModeSupported,
             onGameModeChange = onGameModeChange,
             spatialAudioMode = spatialAudioMode,
             onSpatialAudioModeChange = onSpatialAudioModeChange,
@@ -166,8 +174,9 @@ fun PodDetailPage(
             spatialAudioSupported = spatialAudioSupported,
             spatialSoundSupported = spatialSoundSupported,
             adaptiveModeEnabled = adaptiveModeEnabled,
-            eqPreset = eqPreset,
-            onEqPresetChange = onEqPresetChange,
+            equalizerVisible = equalizerVisible,
+            dualDeviceSupported = dualDeviceSupported,
+            onOpenEqualizer = onOpenEqualizer,
             bottomContentPadding = bottomContentPadding
         )
     }
@@ -191,6 +200,7 @@ private fun LazyListScope.podControlItems(
     transparencyVocalEnhancement: Boolean,
     onTransparencyVocalEnhancementChange: (Boolean) -> Unit,
     gameMode: Boolean,
+    gameModeSupported: Boolean,
     onGameModeChange: (Boolean) -> Unit,
     spatialAudioMode: Int,
     onSpatialAudioModeChange: (Int) -> Unit,
@@ -199,8 +209,9 @@ private fun LazyListScope.podControlItems(
     spatialAudioSupported: Boolean,
     spatialSoundSupported: Boolean,
     adaptiveModeEnabled: Boolean,
-    eqPreset: Int,
-    onEqPresetChange: (Int) -> Unit,
+    equalizerVisible: Boolean,
+    dualDeviceSupported: Boolean,
+    onOpenEqualizer: () -> Unit,
     bottomContentPadding: Dp
 ) {
     val spatialAudioValues = listOf(
@@ -240,12 +251,14 @@ private fun LazyListScope.podControlItems(
         Card(
             modifier = Modifier.padding(horizontal = 12.dp)
         ) {
-            SwitchPreference(
-                title = stringResource(R.string.game_mode),
-                summary = stringResource(R.string.game_mode_summary),
-                checked = gameMode,
-                onCheckedChange = onGameModeChange
-            )
+            if (gameModeSupported) {
+                SwitchPreference(
+                    title = stringResource(R.string.game_mode),
+                    summary = stringResource(R.string.game_mode_summary),
+                    checked = gameMode,
+                    onCheckedChange = onGameModeChange
+                )
+            }
             if (spatialAudioSupported) {
                 val spatialAudioOptions = listOf(
                     stringResource(R.string.off),
@@ -270,26 +283,27 @@ private fun LazyListScope.podControlItems(
                     }
                 )
             }
-            val eqOptions = listOf(
-                stringResource(R.string.eq_preset_authentic),
-                stringResource(R.string.eq_preset_detail),
-                stringResource(R.string.eq_preset_vocal),
-                stringResource(R.string.eq_preset_bass),
-                stringResource(R.string.eq_preset_dynaudio),
-            )
-            OverlayDropdownPreference(
-                title = stringResource(R.string.eq_preset_title),
-                summary = stringResource(R.string.eq_preset_summary),
-                items = eqOptions,
-                selectedIndex = EqPreset.ALL.indexOf(eqPreset).coerceAtLeast(0),
-                onSelectedIndexChange = { onEqPresetChange(EqPreset.ALL[it]) }
-            )
-            SwitchPreference(
-                title = stringResource(R.string.dual_device_connection),
-                summary = stringResource(if (dualDeviceConnection) R.string.enabled else R.string.off),
-                checked = dualDeviceConnection,
-                onCheckedChange = onDualDeviceConnectionChange
-            )
+            if (equalizerVisible) {
+                BasicComponent(
+                    title = stringResource(R.string.eq_preset_title),
+                    summary = stringResource(R.string.eq_preset_summary),
+                    onClick = onOpenEqualizer,
+                    endActions = {
+                        Icon(
+                            imageVector = MiuixIcons.ArrowRight,
+                            contentDescription = null,
+                        )
+                    },
+                )
+            }
+            if (dualDeviceSupported) {
+                SwitchPreference(
+                    title = stringResource(R.string.dual_device_connection),
+                    summary = stringResource(if (dualDeviceConnection) R.string.enabled else R.string.off),
+                    checked = dualDeviceConnection,
+                    onCheckedChange = onDualDeviceConnectionChange
+                )
+            }
         }
     }
     item {

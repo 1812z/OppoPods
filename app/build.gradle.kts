@@ -45,6 +45,12 @@ android {
                 "proguard-rules.pro"
             )
         }
+        create("releaseFast") {
+            initWith(getByName("release"))
+            isMinifyEnabled = false
+            isShrinkResources = false
+            matchingFallbacks += listOf("release")
+        }
     }
 
     dependenciesInfo.includeInApk = false

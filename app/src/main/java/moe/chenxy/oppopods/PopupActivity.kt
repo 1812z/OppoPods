@@ -168,12 +168,12 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
     val gameMode = remember { mutableStateOf(false) }
     val transparencyVocalEnhancement = remember { mutableStateOf(false) }
     val deviceName = remember { mutableStateOf("") }
-    val appConfig = remember { ConfigManager.refreshFromPrefs(prefs) }
+    val productId = remember { mutableStateOf<String?>(null) }
+    remember { ConfigManager.refreshFromPrefs(prefs) }
     val capabilities = detectDeviceCapabilities(
+        context = context,
         deviceName = deviceName.value,
-        adaptiveOverride = appConfig.adaptiveCapabilityOverride,
-        spatialAudioOverride = appConfig.spatialAudioCapabilityOverride,
-        spatialSoundSwitchOverride = appConfig.spatialSoundSwitchCapabilityOverride,
+        productId = productId.value,
     )
 
     val broadcastReceiver = remember {
@@ -200,9 +200,11 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
                     }
                     OppoPodsAction.ACTION_PODS_CONNECTED -> {
                         deviceName.value = p1.getStringExtra("device_name") ?: ""
+                        productId.value = p1.getStringExtra("product_id") ?: productId.value
                         if (!showDialog.value) showDialog.value = true
                     }
                     OppoPodsAction.ACTION_PODS_DISCONNECTED -> {
+                        productId.value = null
                         showDialog.value = false
                     }
                     OppoPodsAction.ACTION_PODS_GAME_MODE_CHANGED -> {
