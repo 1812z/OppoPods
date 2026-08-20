@@ -73,6 +73,7 @@ object RfcommController {
     private var autoGameModeEnabled: Boolean = false
     private var gameModeFeatureId: Int = GameModeFeature.MAIN
     private var lastGameModeStatusUpdateMs: Long = 0L
+    private var autoGameModeJob: kotlinx.coroutines.Job? = null
     private var lastKnownCaseBattery: Int = 0
     private var lastKnownCaseCharging: Boolean = false
     private var cachedDeviceName: String = ""
@@ -145,7 +146,11 @@ object RfcommController {
 
     private fun changeUIGameModeStatus(enabled: Boolean) {
         sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_GAME_MODE_CHANGED) {
+            if (::mDevice.isInitialized) putExtra("address", mDevice.address)
             this.putExtra("enabled", enabled)
+        }
+        sendExternalPodsStatusBroadcast(OppoPodsAction.ACTION_PODS_GAME_MODE_CHANGED) {
+            putExtra("enabled", enabled)
         }
     }
 
@@ -233,6 +238,8 @@ object RfcommController {
             OppoPodsAction.ACTION_AUTO_GAME_MODE_CHANGED -> {
                 autoGameModeEnabled = intent.getBooleanExtra("enabled", autoGameModeEnabled)
                 Log.d(TAG, "Auto game mode synced: $autoGameModeEnabled")
+                if (autoGameModeEnabled) scheduleAutoGameModeOnConnect(waitForProductId = currentProductId == null)
+                else autoGameModeJob?.cancel()
             }
             OppoPodsAction.ACTION_TRANSPARENCY_VOCAL_ENHANCEMENT_SET -> {
                 val enabled = intent.getBooleanExtra("enabled", false)
@@ -505,8 +512,8 @@ object RfcommController {
         if (appRequested) {
             markAppUiActive()
         }
-        autoGameModeEnabled = mPrefs.getBoolean("auto_game_mode", false)
         ConfigManager.refreshFromPrefs(mPrefs)
+        autoGameModeEnabled = ConfigManager.autoGameMode()
         Log.d(TAG, "Adaptive support initial: ${currentCapabilities().adaptiveSupported}")
         Log.d(TAG, "Auto game mode initial: $autoGameModeEnabled")
         Log.d(TAG, "RFCOMM UUID initial: $OPPO_RFCOMM_UUID")
@@ -642,9 +649,7 @@ object RfcommController {
                 delay(50)
                 sendStatusQueryPackets(immediateReconnect = false)
 
-                if (autoGameModeEnabled) {
-                    enableGameModeOnConnect()
-                }
+                scheduleAutoGameModeOnConnect(waitForProductId = true)
             } catch (e: IOException) {
                 Log.e(TAG, "RFCOMM connect failed", e)
                 changeUIConnectionState("error")
@@ -735,6 +740,7 @@ object RfcommController {
             val model = mContext?.let { DeviceModelRegistry.byProductId(it, productId) }
             gameModeFeatureId = currentCapabilities().gameModeFeatureId
             Log.d(TAG, "Product id received: $productId, model=${model?.modelName ?: "unknown"}")
+            scheduleAutoGameModeOnConnect(waitForProductId = false)
             if (::mDevice.isInitialized && isConnected) {
                 sendAppStatusBroadcast(OppoPodsAction.ACTION_PODS_CONNECTED) {
                     putExtra("address", mDevice.address)
@@ -877,14 +883,20 @@ object RfcommController {
             } else {
                 switchFeatureStatus.lowLatencyEnabled
             }
-            val gameModeResult = preferredGameMode
-                ?: switchFeatureStatus.mainEnabled
-                ?: switchFeatureStatus.lowLatencyEnabled
+            val gameModeResult = if (currentProductId != null) {
+                preferredGameMode
+            } else {
+                preferredGameMode
+                    ?: switchFeatureStatus.mainEnabled
+                    ?: switchFeatureStatus.lowLatencyEnabled
+            }
             if (gameModeResult != null) {
-                if (switchFeatureStatus.mainEnabled == null && switchFeatureStatus.lowLatencyEnabled != null) {
-                    gameModeFeatureId = GameModeFeature.LOW_LATENCY
-                } else if (switchFeatureStatus.lowLatencyEnabled == null && switchFeatureStatus.mainEnabled != null) {
-                    gameModeFeatureId = GameModeFeature.MAIN
+                if (currentProductId == null) {
+                    if (switchFeatureStatus.mainEnabled == null && switchFeatureStatus.lowLatencyEnabled != null) {
+                        gameModeFeatureId = GameModeFeature.LOW_LATENCY
+                    } else if (switchFeatureStatus.lowLatencyEnabled == null && switchFeatureStatus.mainEnabled != null) {
+                        gameModeFeatureId = GameModeFeature.MAIN
+                    }
                 }
                 Log.d(TAG, "Game mode received: $gameModeResult")
                 lastGameModeStatusUpdateMs = SystemClock.elapsedRealtime()
@@ -903,7 +915,11 @@ object RfcommController {
         val setFeatureResult = SwitchFeatureSetParser.parse(packet)
         if (setFeatureResult != null) {
             Log.d(TAG, "Switch feature response: status=${setFeatureResult.status}, value=${setFeatureResult.value}")
-            if (setFeatureResult.featureId == GameModeFeature.DUAL_DEVICE_CONNECTION && setFeatureResult.value != null) {
+            if (setFeatureResult.featureId == gameModeFeatureId && setFeatureResult.value != null) {
+                currentGameMode = setFeatureResult.value == 0x01
+                lastGameModeStatusUpdateMs = SystemClock.elapsedRealtime()
+                changeUIGameModeStatus(currentGameMode)
+            } else if (setFeatureResult.featureId == GameModeFeature.DUAL_DEVICE_CONNECTION && setFeatureResult.value != null) {
                 currentDualDeviceConnection = setFeatureResult.value == 0x01
                 changeUIDualDeviceConnectionStatus(currentDualDeviceConnection)
             }
@@ -919,6 +935,8 @@ object RfcommController {
         connectionJob?.cancel()
         reconnectJob?.cancel()
         readerJob?.cancel()
+        autoGameModeJob?.cancel()
+        autoGameModeJob = null
         reconnectAttempts.set(0)
         reconnectPending = false
 
@@ -988,13 +1006,13 @@ object RfcommController {
     fun setGameMode(enabled: Boolean) {
         Log.d(TAG, "setGameMode: $enabled")
         currentGameMode = enabled
+        changeUIGameModeStatus(enabled)
         CoroutineScope(Dispatchers.IO).launch {
             sendGameModePackets(enabled, "game mode control")
         }
     }
 
     private suspend fun enableGameModeOnConnect() {
-        delay(500)
         repeat(3) { attempt ->
             if (!isConnected || mContext == null) return
 
@@ -1062,6 +1080,17 @@ object RfcommController {
         changeUIEqPreset(presetId)
         CoroutineScope(Dispatchers.IO).launch {
             sendPacketSafe(packet, "eq preset control")
+        }
+    }
+
+    private fun scheduleAutoGameModeOnConnect(waitForProductId: Boolean) {
+        if (!autoGameModeEnabled || !isConnected) return
+        autoGameModeJob?.cancel()
+        autoGameModeJob = CoroutineScope(Dispatchers.IO).launch {
+            if (waitForProductId && currentProductId == null) delay(1_200)
+            if (!isConnected || !autoGameModeEnabled) return@launch
+            gameModeFeatureId = currentCapabilities().gameModeFeatureId
+            enableGameModeOnConnect()
         }
     }
 
@@ -1258,11 +1287,16 @@ object RfcommController {
     }
 
     fun setRegularBatteryLevel(level: Int) {
-        try {
-            val service = getObjectField(mContext, "mAdapterService")
+        if (!::mDevice.isInitialized) return
+        runCatching {
+            callMethod(mDevice, "setBatteryLevel", level)
+        }.recoverCatching {
+            val service = listOf("mAdapterService", "mService")
+                .firstNotNullOfOrNull { field -> runCatching { getObjectField(mContext, field) }.getOrNull() }
+                ?: throw it
             callMethod(service, "setBatteryLevel", mDevice, level, false)
-        } catch (e: Exception) {
-            Log.e(TAG, "setRegularBatteryLevel failed", e)
+        }.onFailure {
+            Log.w(TAG, "setRegularBatteryLevel unsupported on this Bluetooth stack: ${it.message}")
         }
     }
 

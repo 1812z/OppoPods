@@ -13,6 +13,7 @@ import android.content.IntentFilter
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Icon
 import android.os.Bundle
+import android.os.Looper
 import com.xzakota.hyper.notification.focus.FocusNotification
 import moe.chenxy.oppopods.utils.FocusIslandUtil
 import moe.chenxy.oppopods.utils.PodImageLoader
@@ -32,6 +33,7 @@ object MiBluetoothToastHook : HookContext() {
     // ANC 模式本地缓存，用于循环切换和状态同步（1=关 2=降噪 3=通透 4=自适应）
     // 通过接收 ACTION_PODS_ANC_CHANGED 广播与 RfcommController 保持同步
     private var localAncMode = 1
+    private var notificationReceiverRegistered = false
 
     override fun onHook() {
 
@@ -241,10 +243,9 @@ object MiBluetoothToastHook : HookContext() {
         }
 
 
-        hookConstructorAfter(findConstructorByParamCount("com.android.bluetooth.ble.app.MiuiBluetoothNotification", 2)) {
-            val context = getObjectField(instance, "mContext") as Context
-
-                    val broadcastReceiver = object : BroadcastReceiver() {
+        fun registerNotificationReceiver(context: Context) {
+            if (notificationReceiverRegistered) return
+            val broadcastReceiver = object : BroadcastReceiver() {
                         override fun onReceive(p0: Context?, p1: Intent?) {
                             if (p1?.action == "chen.action.oppopods.sendstrongtoast") {
                                 if (ConfigManager.islandMode() != ConfigManager.ISLAND_MODE_MODULE) {
@@ -289,16 +290,41 @@ object MiBluetoothToastHook : HookContext() {
                         }
                     }
 
-                    val intentFilter = IntentFilter("chen.action.oppopods.sendstrongtoast")
-                    intentFilter.addAction("chen.action.oppopods.updatepodsnotification")
-                    intentFilter.addAction("chen.action.oppopods.cancelpodsnotification")
-                    intentFilter.addAction(OppoPodsAction.ACTION_CYCLE_ANC)
-                    intentFilter.addAction(OppoPodsAction.ACTION_PODS_CONNECTED)
-                    intentFilter.addAction(OppoPodsAction.ACTION_PODS_DISCONNECTED)
-                    // 监听耳机实际 ANC 状态变更广播，保持 localAncMode 与 RfcommController 同步
-                    intentFilter.addAction(OppoPodsAction.ACTION_PODS_ANC_CHANGED)
-                    context.registerReceiver(broadcastReceiver, intentFilter,
-                        Context.RECEIVER_EXPORTED)
+            val intentFilter = IntentFilter("chen.action.oppopods.sendstrongtoast")
+            intentFilter.addAction("chen.action.oppopods.updatepodsnotification")
+            intentFilter.addAction("chen.action.oppopods.cancelpodsnotification")
+            intentFilter.addAction(OppoPodsAction.ACTION_CYCLE_ANC)
+            intentFilter.addAction(OppoPodsAction.ACTION_PODS_CONNECTED)
+            intentFilter.addAction(OppoPodsAction.ACTION_PODS_DISCONNECTED)
+            intentFilter.addAction(OppoPodsAction.ACTION_PODS_ANC_CHANGED)
+            context.registerReceiver(broadcastReceiver, intentFilter, Context.RECEIVER_EXPORTED)
+            notificationReceiverRegistered = true
+        }
+
+        fun hookNotificationConstructor(vararg parameterTypes: Class<*>) {
+            runCatching {
+                hookConstructorAfter(
+                    findConstructor(
+                        "com.android.bluetooth.ble.app.MiuiBluetoothNotification",
+                        *parameterTypes,
+                    )
+                ) {
+                    val context = args.filterIsInstance<Context>().firstOrNull()
+                        ?: runCatching { getObjectField(instance, "mContext") as? Context }.getOrNull()
+                        ?: return@hookConstructorAfter
+                    registerNotificationReceiver(context)
+                }
+            }.onFailure {
+                Log.d("OppoPods", "MiuiBluetoothNotification constructor unavailable: ${parameterTypes.joinToString { type -> type.name }}")
+            }
+        }
+
+        hookNotificationConstructor(Context::class.java, Looper::class.java)
+        runCatching {
+            hookNotificationConstructor(
+                Looper::class.java,
+                findClass("com.android.bluetooth.ble.app.headset.BluetoothHeadsetService"),
+            )
         }
     }
 

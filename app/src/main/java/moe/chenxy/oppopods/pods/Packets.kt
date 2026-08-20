@@ -885,7 +885,12 @@ object SwitchFeatureSetParser {
         for (i in payloadStart until payloadEnd - 1) {
             val featureId = data[i].toInt() and 0xFF
             val value = data[i + 1].toInt() and 0xFF
-            if (featureId == GameModeFeature.DUAL_DEVICE_CONNECTION && (value == 0x00 || value == 0x01)) {
+            if (featureId in setOf(
+                    GameModeFeature.MAIN,
+                    GameModeFeature.LOW_LATENCY,
+                    GameModeFeature.DUAL_DEVICE_CONNECTION,
+                ) && (value == 0x00 || value == 0x01)
+            ) {
                 return FeatureValue(featureId, value)
             }
         }

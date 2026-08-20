@@ -42,6 +42,8 @@ fun SettingsPage(
     onAppLanguageChange: (Int) -> Unit = {},
     autoGameMode: MutableState<Boolean> = mutableStateOf(false),
     onAutoGameModeChange: (Boolean) -> Unit = {},
+    milinkCardFeatures: MutableState<Set<Int>> = mutableStateOf(ConfigManager.DEFAULT_MILINK_CARD_FEATURES),
+    onMilinkCardFeaturesChange: (Set<Int>) -> Unit = {},
     notificationClickAction: MutableState<Int> = mutableStateOf(ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP),
     onNotificationClickActionChange: (Int) -> Unit = {},
     moreClickAction: MutableState<Int> = mutableStateOf(ConfigManager.MORE_CLICK_MODULE),
@@ -112,6 +114,26 @@ fun SettingsPage(
         stringResource(R.string.click_action_system_settings),
         stringResource(R.string.click_action_module),
     )
+    val milinkCardFeatureOptions = listOf(
+        ConfigManager.MILINK_CARD_GAME_MODE to stringResource(R.string.game_mode),
+        ConfigManager.MILINK_CARD_SPATIAL_AUDIO to stringResource(R.string.spatial_audio),
+    )
+    val milinkCardFeatureEntries = remember(milinkCardFeatures.value, milinkCardFeatureOptions) {
+        listOf(
+            DropdownEntry(
+                items = milinkCardFeatureOptions.map { (value, text) ->
+                    DropdownItem(
+                        text = text,
+                        selected = value in milinkCardFeatures.value,
+                        onClick = {
+                            val selected = milinkCardFeatures.value
+                            onMilinkCardFeaturesChange(if (value in selected) selected - value else selected + value)
+                        },
+                    )
+                }
+            )
+        )
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -183,6 +205,12 @@ fun SettingsPage(
                     title = stringResource(R.string.auto_game_mode),
                     checked = autoGameMode.value,
                     onCheckedChange = { onAutoGameModeChange(it) }
+                )
+                OverlayDropdownPreference(
+                    title = stringResource(R.string.milink_card_features),
+                    summary = stringResource(R.string.milink_card_features_summary),
+                    entries = milinkCardFeatureEntries,
+                    collapseOnSelection = false,
                 )
                 OverlayDropdownPreference(
                     title = stringResource(R.string.notification_click_action),

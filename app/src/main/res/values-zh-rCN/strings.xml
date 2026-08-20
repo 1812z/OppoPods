@@ -13,6 +13,8 @@
     <string name="enable_game_mode">打开游戏模式</string>
     <string name="disable_game_mode">关闭游戏模式</string>
     <string name="auto_game_mode">连接时自动开启游戏模式</string>
+    <string name="milink_card_features">互联卡片</string>
+    <string name="milink_card_features_summary">在互联卡片添加支持的功能</string>
     <string name="spatial_audio">空间音频</string>
     <string name="spatial_sound">空间音效</string>
     <string name="dual_device_connection">双设备连接</string>

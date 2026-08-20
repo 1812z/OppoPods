@@ -119,6 +119,7 @@ fun MainUI(
     val tabs = remember { MainTab.entries.toList() }
     var selectedTab by remember { mutableStateOf(MainTab.Module) }
     var hasAppliedDefaultTab by remember { mutableStateOf(false) }
+    var hasAutoOpenedConnectedDevice by remember { mutableStateOf(false) }
     var bluetoothState by remember { mutableStateOf(readBluetoothState(context)) }
     var xposedService by remember { mutableStateOf(OppoPodsApp.xposedService) }
     var showDevicePicker by remember { mutableStateOf(false) }
@@ -146,7 +147,8 @@ fun MainUI(
     // Auto game mode preference (persisted)
     val prefs = remember { context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE) }
     val appConfig = remember { ConfigManager.refreshFromPrefs(prefs) }
-    val autoGameMode = remember { mutableStateOf(prefs.getBoolean("auto_game_mode", false)) }
+    val autoGameMode = remember { mutableStateOf(appConfig.autoGameMode) }
+    val milinkCardFeatures = remember { mutableStateOf(appConfig.milinkCardFeatures) }
     val notificationClickAction = remember { mutableStateOf(appConfig.notificationClickAction) }
     val moreClickAction = remember { mutableStateOf(appConfig.moreClickAction) }
     val desktopIconHidden = remember { mutableStateOf(isLauncherIconHidden(context)) }
@@ -280,7 +282,7 @@ fun MainUI(
 
                     OppoPodsAction.ACTION_PODS_CONNECTED -> {
                         val deviceName = p1.getStringExtra("device_name")
-                        val shouldOpenEarphones = connectingDeviceAddress != null || !hasAppliedDefaultTab
+                        val shouldOpenEarphones = connectingDeviceAddress != null || !hasAutoOpenedConnectedDevice
                         connectedDeviceAddress = p1.getStringExtra("address") ?: connectedDeviceAddress
                         productId.value = p1.getStringExtra("product_id") ?: productId.value
                         connectingDeviceAddress = null
@@ -294,11 +296,11 @@ fun MainUI(
                         hookConnected.value = true
                         hookConnectionState = "connected"
                         if (shouldOpenEarphones) {
-                            if (!hasAppliedDefaultTab) {
-                                selectedTab = MainTab.Earphones
-                            }
+                            selectedTab = MainTab.Earphones
                             hasAppliedDefaultTab = true
-                            pendingOpenEarphonesAfterPickerLoaded = true
+                            hasAutoOpenedConnectedDevice = true
+                            showDevicePicker = false
+                            pendingOpenEarphonesAfterPickerLoaded = false
                         }
                         Log.i("OppoPods", "pod connected via hook: $deviceName")
                     }
@@ -310,6 +312,7 @@ fun MainUI(
                             productId.value = null
                             mainTitle.value = ""
                             hookConnected.value = false
+                            hasAutoOpenedConnectedDevice = false
                         } else if (hookConnected.value) {
                             connectedDeviceAddress = p1.getStringExtra("address") ?: connectedDeviceAddress
                             p1.getStringExtra("device_name")?.let {
@@ -325,6 +328,7 @@ fun MainUI(
                         productId.value = null
                         hookConnectionState = "disconnected"
                         hookConnected.value = false
+                        hasAutoOpenedConnectedDevice = false
                     }
 
                     OppoPodsAction.ACTION_MODULE_BLUETOOTH_SERVICE_ALIVE -> {
@@ -731,13 +735,19 @@ fun MainUI(
                 autoGameMode = autoGameMode,
                 onAutoGameModeChange = {
                     autoGameMode.value = it
-                    prefs.edit().putBoolean("auto_game_mode", it).apply()
+                    ConfigManager.updateAutoGameMode(prefs, xposedService, it)
                     Intent(OppoPodsAction.ACTION_AUTO_GAME_MODE_CHANGED).apply {
                         setPackage("com.android.bluetooth")
                         putExtra("enabled", it)
                         addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                         context.sendBroadcast(this)
                     }
+                },
+                milinkCardFeatures = milinkCardFeatures,
+                onMilinkCardFeaturesChange = {
+                    milinkCardFeatures.value = it
+                    ConfigManager.updateMilinkCardFeatures(prefs, xposedService, it)
+                    broadcastConfigChanged(context, "com.milink.service")
                 },
                 notificationClickAction = notificationClickAction,
                 onNotificationClickActionChange = {

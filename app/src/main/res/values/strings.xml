@@ -12,6 +12,8 @@
     <string name="enable_game_mode">Enable Game Mode</string>
     <string name="disable_game_mode">Disable Game Mode</string>
     <string name="auto_game_mode">Auto-enable game mode on connect</string>
+    <string name="milink_card_features">Interconnect card</string>
+    <string name="milink_card_features_summary">Add supported features to the interconnect card</string>
     <string name="spatial_audio">Spatial Audio</string>
     <string name="spatial_sound">Spatial Sound</string>
     <string name="dual_device_connection">Dual-device connection</string>

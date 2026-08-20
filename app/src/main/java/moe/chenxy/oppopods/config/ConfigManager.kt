@@ -14,6 +14,8 @@ data class AppConfig(
     val islandShowTimings: Set<Int> = emptySet(),
     val notificationClickAction: Int = ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP,
     val moreClickAction: Int = ConfigManager.MORE_CLICK_MODULE,
+    val milinkCardFeatures: Set<Int> = ConfigManager.DEFAULT_MILINK_CARD_FEATURES,
+    val autoGameMode: Boolean = false,
 )
 
 object ConfigManager {
@@ -26,6 +28,8 @@ object ConfigManager {
     const val PREF_KEY_ISLAND_SHOW_TIMINGS = "island_show_timings"
     const val PREF_KEY_NOTIFICATION_CLICK_ACTION = "notification_click_action"
     const val PREF_KEY_MORE_CLICK_ACTION = "more_click_action"
+    const val PREF_KEY_MILINK_CARD_FEATURES = "milink_card_features"
+    const val PREF_KEY_AUTO_GAME_MODE = "auto_game_mode"
     const val DEFAULT_FAKE_DEVICE_ID = "01010607"
     const val LOG_LEVEL_OFF = 0
     const val LOG_LEVEL_BASIC = 1
@@ -46,6 +50,9 @@ object ConfigManager {
     const val SPATIAL_AUDIO_OFF = 0
     const val SPATIAL_AUDIO_FIXED = 1
     const val SPATIAL_AUDIO_HEAD_TRACKING = 2
+    const val MILINK_CARD_GAME_MODE = 0
+    const val MILINK_CARD_SPATIAL_AUDIO = 1
+    val DEFAULT_MILINK_CARD_FEATURES = setOf(MILINK_CARD_GAME_MODE, MILINK_CARD_SPATIAL_AUDIO)
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -82,6 +89,10 @@ object ConfigManager {
     fun notificationClickAction(): Int = current().notificationClickAction.coerceIn(NOTIFICATION_CLICK_MODULE_POPUP, NOTIFICATION_CLICK_HEYTAP)
 
     fun moreClickAction(): Int = current().moreClickAction.coerceIn(MORE_CLICK_HEYTAP, MORE_CLICK_MODULE)
+
+    fun milinkCardFeatures(): Set<Int> = current().milinkCardFeatures.normalizedMilinkCardFeatures()
+
+    fun autoGameMode(): Boolean = current().autoGameMode
 
     fun fakeSupport(): String = "${fakeDeviceId()},000000000000000010000000"
 
@@ -120,6 +131,14 @@ object ConfigManager {
         save(prefs, service, config)
     }
 
+    fun updateMilinkCardFeatures(prefs: SharedPreferences, service: XposedService?, features: Set<Int>) {
+        save(prefs, service, current().copy(milinkCardFeatures = features.normalizedMilinkCardFeatures()))
+    }
+
+    fun updateAutoGameMode(prefs: SharedPreferences, service: XposedService?, enabled: Boolean) {
+        save(prefs, service, current().copy(autoGameMode = enabled))
+    }
+
     fun save(prefs: SharedPreferences, config: AppConfig) {
         val oldConfig = cachedConfig
         val normalized = config.copy(fakeDeviceId = config.fakeDeviceId.normalizedFakeDeviceId())
@@ -149,6 +168,8 @@ object ConfigManager {
             .putStringSet(PREF_KEY_ISLAND_SHOW_TIMINGS, config.islandShowTimings.map { it.toString() }.toSet())
             .putInt(PREF_KEY_NOTIFICATION_CLICK_ACTION, config.notificationClickAction)
             .putInt(PREF_KEY_MORE_CLICK_ACTION, config.moreClickAction)
+            .putStringSet(PREF_KEY_MILINK_CARD_FEATURES, config.milinkCardFeatures.map(Int::toString).toSet())
+            .putBoolean(PREF_KEY_AUTO_GAME_MODE, config.autoGameMode)
             .commit()
     }
 
@@ -159,6 +180,11 @@ object ConfigManager {
         val directIslandShowTimings = prefs.getStringSet(PREF_KEY_ISLAND_SHOW_TIMINGS, null)?.mapNotNull { it.toIntOrNull() }?.toSet()
         val directNotificationClickAction = prefs.getInt(PREF_KEY_NOTIFICATION_CLICK_ACTION, Int.MIN_VALUE)
         val directMoreClickAction = prefs.getInt(PREF_KEY_MORE_CLICK_ACTION, Int.MIN_VALUE)
+        val directMilinkCardFeatures = prefs.getStringSet(PREF_KEY_MILINK_CARD_FEATURES, null)
+            ?.mapNotNull(String::toIntOrNull)
+            ?.toSet()
+        val directAutoGameMode = prefs.takeIf { it.contains(PREF_KEY_AUTO_GAME_MODE) }
+            ?.getBoolean(PREF_KEY_AUTO_GAME_MODE, false)
         val raw = prefs.getString(PREF_KEY_CONFIG_JSON, null)
         logPrefsSnapshot(source, prefs, directFakeDeviceId, raw)
         val config = raw?.let {
@@ -173,6 +199,8 @@ object ConfigManager {
                 islandShowTimings = directIslandShowTimings ?: config.islandShowTimings,
                 notificationClickAction = directNotificationClickAction.takeIf { it != Int.MIN_VALUE } ?: config.notificationClickAction,
                 moreClickAction = directMoreClickAction.takeIf { it != Int.MIN_VALUE } ?: migratedMoreClickAction,
+                milinkCardFeatures = directMilinkCardFeatures ?: config.milinkCardFeatures,
+                autoGameMode = directAutoGameMode ?: config.autoGameMode,
             ).normalized()
         }
         return config.copy(
@@ -182,6 +210,8 @@ object ConfigManager {
             islandShowTimings = directIslandShowTimings ?: config.islandShowTimings,
             notificationClickAction = directNotificationClickAction.takeIf { it != Int.MIN_VALUE } ?: config.notificationClickAction,
             moreClickAction = directMoreClickAction.takeIf { it != Int.MIN_VALUE } ?: migratedMoreClickAction,
+            milinkCardFeatures = directMilinkCardFeatures ?: config.milinkCardFeatures,
+            autoGameMode = directAutoGameMode ?: config.autoGameMode,
         ).normalized()
     }
 
@@ -192,12 +222,17 @@ object ConfigManager {
         islandShowTimings = islandShowTimings.normalizedIslandShowTimings(),
         notificationClickAction = notificationClickAction.coerceIn(NOTIFICATION_CLICK_MODULE_POPUP, NOTIFICATION_CLICK_HEYTAP),
         moreClickAction = moreClickAction.coerceIn(MORE_CLICK_HEYTAP, MORE_CLICK_MODULE),
+        milinkCardFeatures = milinkCardFeatures.normalizedMilinkCardFeatures(),
     )
 
     private fun String.normalizedFakeDeviceId(): String = trim().takeIf { it.isNotEmpty() } ?: DEFAULT_FAKE_DEVICE_ID
 
     private fun Set<Int>.normalizedIslandShowTimings(): Set<Int> = filterTo(mutableSetOf()) {
         it in ISLAND_SHOW_TIMING_CONNECTED..ISLAND_SHOW_TIMING_IN_CASE
+    }
+
+    private fun Set<Int>.normalizedMilinkCardFeatures(): Set<Int> = filterTo(mutableSetOf()) {
+        it == MILINK_CARD_GAME_MODE || it == MILINK_CARD_SPATIAL_AUDIO
     }
 
     private fun logConfigChange(source: String, oldConfig: AppConfig, newConfig: AppConfig) {
@@ -237,6 +272,12 @@ object ConfigManager {
             }
             if (oldConfig.moreClickAction != newConfig.moreClickAction) {
                 add("moreClickAction=${oldConfig.moreClickAction}->${newConfig.moreClickAction}")
+            }
+            if (oldConfig.milinkCardFeatures != newConfig.milinkCardFeatures) {
+                add("milinkCardFeatures=${oldConfig.milinkCardFeatures}->${newConfig.milinkCardFeatures}")
+            }
+            if (oldConfig.autoGameMode != newConfig.autoGameMode) {
+                add("autoGameMode=${oldConfig.autoGameMode}->${newConfig.autoGameMode}")
             }
         }
     }
