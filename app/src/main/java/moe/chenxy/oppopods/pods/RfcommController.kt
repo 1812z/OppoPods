@@ -608,8 +608,11 @@ object RfcommController {
     }
 
     private fun shouldShowIsland(timing: Int): Boolean {
-        return ConfigManager.islandMode() == ConfigManager.ISLAND_MODE_MODULE &&
-                timing in ConfigManager.islandShowTimings()
+        return when (ConfigManager.islandMode()) {
+            ConfigManager.ISLAND_MODE_OFFICIAL -> timing == ConfigManager.ISLAND_SHOW_TIMING_CONNECTED
+            ConfigManager.ISLAND_MODE_MODULE -> timing in ConfigManager.islandShowTimings()
+            else -> false
+        }
     }
 
     private fun islandShowTimingForChange(previous: WearState?, current: WearState?): Int? {

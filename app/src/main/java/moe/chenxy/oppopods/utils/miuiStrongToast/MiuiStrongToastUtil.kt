@@ -25,6 +25,9 @@ import moe.chenxy.oppopods.utils.miuiStrongToast.data.TextParams
 @SuppressLint("WrongConstant")
 object MiuiStrongToastUtil {
     var lastPodsTimestamp = -1L
+    private const val OFFICIAL_TOAST_DURATION_MS = 5_000L
+    private var officialToastPostedAt = 0L
+    private val toastJson = Json { encodeDefaults = true; explicitNulls = false }
 
     fun showStringToast(context: Context, text: String?, colorType: Int) {
         if (!isHyperOS) {
@@ -109,6 +112,113 @@ object MiuiStrongToastUtil {
         intent.putExtra("address", device?.address.orEmpty())
         intent.`package` = "com.xiaomi.bluetooth"
         context.sendBroadcast(intent)
+    }
+
+    fun showOfficialConnectToast(
+        context: Context,
+        batteryParams: BatteryParams,
+        lowBatteryThreshold: Int = 20,
+    ) {
+        if (!isHyperOS) return
+        val leftPod = batteryParams.left?.takeIf { it.isConnected }
+        val rightPod = batteryParams.right?.takeIf { it.isConnected }
+        if (leftPod == null && rightPod == null) return
+        val leftClip = officialClipUri(context, if (leftPod != null) "earphone_left_inear" else "earphone_left_no_inear") ?: return
+        val rightClip = officialClipUri(context, if (rightPod != null) "earphone_right_inear" else "earphone_right_no_inear") ?: return
+        val left = Left(
+            iconParams = IconParams(Category.RAW, FileType.MP4, leftClip, 1),
+            textParams = leftPod?.let { officialBatteryText(it.battery, it.isCharging, lowBatteryThreshold) },
+        )
+        val right = Right(
+            iconParams = IconParams(Category.RAW, FileType.MP4, rightClip, 1),
+            textParams = rightPod?.let { officialBatteryText(it.battery, it.isCharging, lowBatteryThreshold) },
+        )
+        val toastPayload = toastJson.encodeToString(StringToastBean.serializer(), StringToastBean(left, right))
+        val islandPayload = toastJson.encodeToString(
+            StringToastBean.serializer(),
+            StringToastBean(
+                left.copy(
+                    iconParams = left.iconParams?.copy(iconType = 0),
+                    textParams = left.textParams?.copy(viewFlags = null, turnAnim = true),
+                ),
+                right.copy(
+                    iconParams = right.iconParams?.copy(iconType = 0),
+                    textParams = right.textParams?.copy(viewFlags = null, turnAnim = true),
+                ),
+            ),
+        )
+        val bundle = StringToastBundle.Builder()
+            .setPackageName("com.xiaomi.bluetooth")
+            .setStrongToastCategory(StrongToastCategory.VIDEO_TEXT_TEXT_VIDEO)
+            .setDuration(OFFICIAL_TOAST_DURATION_MS)
+            .setTarget(null)
+            .setParam(toastPayload)
+            .setIslandParam(islandPayload)
+            .setNotifyId("headset_wear_notification")
+            .onCreate()
+        runCatching {
+            val service = context.getSystemService(Context.STATUS_BAR_SERVICE)
+            service.javaClass.getMethod(
+                "setStatus", Int::class.javaPrimitiveType, String::class.java, Bundle::class.java
+            ).invoke(service, 1, "strong_toast_action", bundle)
+            lastPodsTimestamp = System.currentTimeMillis()
+            officialToastPostedAt = lastPodsTimestamp
+            Log.d("OppoPods", "official strong toast shown")
+        }.onFailure { Log.e("OppoPods", "Failed to show official strong toast", it) }
+    }
+
+    fun hideOfficialToast(context: Context) {
+        if (!isHyperOS) return
+        val postedAt = officialToastPostedAt
+        if (postedAt == 0L || System.currentTimeMillis() - postedAt > OFFICIAL_TOAST_DURATION_MS) return
+        officialToastPostedAt = 0L
+        val bundle = Bundle().apply {
+            putString("package_name", "com.xiaomi.bluetooth")
+            putString("status_bar_strong_toast", "hide_strong_toast")
+        }
+        runCatching {
+            val service = context.getSystemService(Context.STATUS_BAR_SERVICE)
+            service.javaClass.getMethod(
+                "setStatus", Int::class.javaPrimitiveType, String::class.java, Bundle::class.java
+            ).invoke(service, 1, "strong_toast_action", bundle)
+        }.onFailure { Log.w("OppoPods", "Failed to hide official strong toast", it) }
+    }
+
+    private fun officialBatteryText(level: Int, charging: Boolean, lowBatteryThreshold: Int) = TextParams(
+        text = "${level.coerceIn(0, 100)}%",
+        textColor = when {
+            charging -> Color.GREEN
+            level <= lowBatteryThreshold -> Color.RED
+            else -> Color.WHITE
+        },
+        viewFlags = 0,
+    )
+
+    private fun officialClipUri(context: Context, name: String): String? {
+        val file = java.io.File(context.filesDir, "$name.mp4")
+        if (!file.exists() || file.length() == 0L) {
+            val resourceId = listOf(name, name.removeSuffix("_inear"))
+                .distinct()
+                .firstNotNullOfOrNull { candidate ->
+                    context.resources.getIdentifier(candidate, "raw", context.packageName).takeIf { it != 0 }
+                } ?: return null
+            val copied = runCatching {
+                context.resources.openRawResource(resourceId).use { input ->
+                    file.outputStream().use { output -> input.copyTo(output) }
+                }
+                file.setReadable(true, false)
+            }.isSuccess
+            if (!copied) return null
+        }
+        val uri = "content://com.xiaomi.bluetooth.fileprovider/internal_files/$name.mp4"
+        runCatching {
+            context.grantUriPermission(
+                "com.android.systemui",
+                Uri.parse(uri),
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        return uri
     }
 
     fun showPodsNotificationByMiuiBt(

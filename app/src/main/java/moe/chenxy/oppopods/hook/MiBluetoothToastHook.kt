@@ -26,6 +26,7 @@ import moe.chenxy.oppopods.utils.miuiStrongToast.data.OppoPodsAction
 import moe.chenxy.oppopods.R
 import moe.chenxy.oppopods.pods.RfcommController
 import moe.chenxy.oppopods.pods.detectDeviceCapabilities
+import moe.chenxy.oppopods.utils.miuiStrongToast.MiuiStrongToastUtil
 
 @SuppressLint("MissingPermission")
 object MiBluetoothToastHook : HookContext() {
@@ -34,6 +35,7 @@ object MiBluetoothToastHook : HookContext() {
     // 通过接收 ACTION_PODS_ANC_CHANGED 广播与 RfcommController 保持同步
     private var localAncMode = 1
     private var notificationReceiverRegistered = false
+    private var lastOfficialIslandShape: Triple<Boolean, Boolean, Boolean>? = null
 
     override fun onHook() {
 
@@ -248,21 +250,33 @@ object MiBluetoothToastHook : HookContext() {
             val broadcastReceiver = object : BroadcastReceiver() {
                         override fun onReceive(p0: Context?, p1: Intent?) {
                             if (p1?.action == "chen.action.oppopods.sendstrongtoast") {
-                                if (ConfigManager.islandMode() != ConfigManager.ISLAND_MODE_MODULE) {
-                                    Log.d("OppoPods", "skip module island mode=${ConfigManager.islandMode()}")
-                                    return
-                                }
                                 val batteryParams = p1.getParcelableExtra("batteryParams", BatteryParams::class.java)!!
-                                // Use Focus Island (HyperOS 3+) for battery display
-                                val address = p1.getStringExtra("address").orEmpty()
-                                FocusIslandUtil.showBatteryIsland(context, prefs, batteryParams, address)
+                                when (ConfigManager.islandMode()) {
+                                    ConfigManager.ISLAND_MODE_MODULE -> {
+                                        val address = p1.getStringExtra("address").orEmpty()
+                                        FocusIslandUtil.showBatteryIsland(context, prefs, batteryParams, address)
+                                    }
+                                    ConfigManager.ISLAND_MODE_OFFICIAL -> {
+                                        MiuiStrongToastUtil.showOfficialConnectToast(context, batteryParams)
+                                        lastOfficialIslandShape = batteryShape(batteryParams)
+                                    }
+                                }
                             } else if (p1?.action == "chen.action.oppopods.updatepodsnotification") {
                                 val batteryParams = p1.getParcelableExtra<BatteryParams>("batteryParams", BatteryParams::class.java)
                                 val device = p1.getParcelableExtra("device", BluetoothDevice::class.java)
+                                if (batteryParams != null && ConfigManager.islandMode() == ConfigManager.ISLAND_MODE_OFFICIAL) {
+                                    val shape = batteryShape(batteryParams)
+                                    if (lastOfficialIslandShape == null || shape != lastOfficialIslandShape) {
+                                        MiuiStrongToastUtil.showOfficialConnectToast(context, batteryParams)
+                                    }
+                                    lastOfficialIslandShape = shape
+                                }
                                 createPodsNotification(device, context, batteryParams!!)
                             } else if (p1?.action == "chen.action.oppopods.cancelpodsnotification") {
                                 val device = p1.getParcelableExtra("device", BluetoothDevice::class.java) as BluetoothDevice
                                 cancelNotification(device, context)
+                                MiuiStrongToastUtil.hideOfficialToast(context)
+                                lastOfficialIslandShape = null
                             } else if (p1?.action == OppoPodsAction.ACTION_PODS_ANC_CHANGED) {
                                 // 同步耳机实际 ANC 状态到本地缓存，确保下次循环切换时状态准确
                                 localAncMode = p1.getIntExtra("status", 1)
@@ -299,6 +313,10 @@ object MiBluetoothToastHook : HookContext() {
             intentFilter.addAction(OppoPodsAction.ACTION_PODS_ANC_CHANGED)
             context.registerReceiver(broadcastReceiver, intentFilter, Context.RECEIVER_EXPORTED)
             notificationReceiverRegistered = true
+            context.sendBroadcast(Intent(OppoPodsAction.ACTION_REFRESH_STATUS).apply {
+                setPackage("com.android.bluetooth")
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            })
         }
 
         fun hookNotificationConstructor(vararg parameterTypes: Class<*>) {
@@ -329,4 +347,10 @@ object MiBluetoothToastHook : HookContext() {
     }
 
     private fun Int.floorMod(divisor: Int): Int = ((this % divisor) + divisor) % divisor
+
+    private fun batteryShape(battery: BatteryParams): Triple<Boolean, Boolean, Boolean> = Triple(
+        battery.left?.isConnected == true,
+        battery.right?.isConnected == true,
+        battery.case?.isConnected == true,
+    )
 }
