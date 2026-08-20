@@ -30,7 +30,6 @@
     <string name="eq_close">Close</string>
     <string name="eq_recommended">Recommended</string>
     <string name="eq_custom">Custom</string>
-    <string name="eq_custom_summary">Custom equalizer preset</string>
     <string name="eq_add_summary">Create a custom equalizer preset</string>
     <string name="eq_recommended_summary">Recommended tuning for this device</string>
     <string name="eq_desc_authentic">Easy listening and compatible with many music styles</string>

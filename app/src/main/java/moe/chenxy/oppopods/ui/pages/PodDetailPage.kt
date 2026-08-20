@@ -40,9 +40,9 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ArrowRight
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 
 @Composable
 fun PodDetailPage(
@@ -290,7 +290,7 @@ private fun LazyListScope.podControlItems(
                     onClick = onOpenEqualizer,
                     endActions = {
                         Icon(
-                            imageVector = MiuixIcons.ArrowRight,
+                            imageVector = MiuixIcons.Basic.ArrowRight,
                             contentDescription = null,
                         )
                     },

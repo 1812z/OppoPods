@@ -40,7 +40,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.VerticalSlider
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.Edit
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
 
@@ -93,7 +92,6 @@ fun EqualizerPage(
                 customPresets.forEach { preset ->
                     CustomEqRow(
                         title = preset.name,
-                        summary = stringResource(R.string.eq_custom_summary),
                         checked = selectedId == preset.id,
                         onSelect = { onSelectPreset(preset.id) },
                         onEdit = { editor = preset },
@@ -187,7 +185,6 @@ private fun EqCheckboxRow(
 @Composable
 private fun CustomEqRow(
     title: String,
-    summary: String,
     checked: Boolean,
     onSelect: () -> Unit,
     onEdit: () -> Unit,
@@ -199,30 +196,15 @@ private fun CustomEqRow(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(
+        Text(
+            text = title,
             modifier = Modifier
                 .weight(1f)
                 .clickable(role = Role.Button, onClick = onEdit)
                 .padding(vertical = 4.dp),
-        ) {
-            Text(
-                text = title,
-                color = MiuixTheme.colorScheme.onSurface,
-                style = MiuixTheme.textStyles.headline1,
-            )
-            Text(
-                text = summary,
-                modifier = Modifier.padding(top = 3.dp),
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                style = MiuixTheme.textStyles.body2,
-            )
-        }
-        IconButton(onClick = onEdit) {
-            Icon(
-                imageVector = MiuixIcons.Edit,
-                contentDescription = stringResource(R.string.eq_edit),
-            )
-        }
+            color = MiuixTheme.colorScheme.onSurface,
+            style = MiuixTheme.textStyles.headline1,
+        )
         IconButton(onClick = onDelete) {
             Icon(
                 imageVector = MiuixIcons.Delete,

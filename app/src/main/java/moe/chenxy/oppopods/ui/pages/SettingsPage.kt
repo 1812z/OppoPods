@@ -24,7 +24,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ArrowRight
+import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 
 @Composable
 fun SettingsPage(
@@ -129,7 +129,7 @@ fun SettingsPage(
                     onClick = onOpenTheme,
                     endActions = {
                         Icon(
-                            imageVector = MiuixIcons.ArrowRight,
+                            imageVector = MiuixIcons.Basic.ArrowRight,
                             contentDescription = null,
                         )
                     },
@@ -222,7 +222,7 @@ fun SettingsPage(
                     onClick = onOpenAbout,
                     endActions = {
                         Icon(
-                            imageVector = MiuixIcons.ArrowRight,
+                            imageVector = MiuixIcons.Basic.ArrowRight,
                             contentDescription = null,
                         )
                     },

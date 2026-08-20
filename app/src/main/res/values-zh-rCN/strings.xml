@@ -31,7 +31,6 @@
     <string name="eq_close">关闭</string>
     <string name="eq_recommended">推荐</string>
     <string name="eq_custom">自定义</string>
-    <string name="eq_custom_summary">自定义均衡器预设</string>
     <string name="eq_add_summary">创建一个自定义均衡器预设</string>
     <string name="eq_recommended_summary">适合当前耳机的推荐调音</string>
     <string name="eq_desc_authentic">经久耐听，完美兼容多种音乐风格</string>
