@@ -1,5 +1,7 @@
 package moe.chenxy.oppopods.ui.pages
 
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +16,15 @@ import androidx.compose.ui.unit.dp
 import moe.chenxy.oppopods.R
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
+
+private fun Context.openUrl(url: String) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        if (this@openUrl !is Activity) {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    }
+    startActivity(intent)
+}
 
 @Composable
 fun AboutPage(
@@ -38,20 +49,14 @@ fun AboutPage(
                     title = "OppoPods-Enhanced",
                     summary = "https://github.com/1812z/OppoPods",
                     onClick = {
-                        Intent(Intent.ACTION_VIEW).apply {
-                            this.data = Uri.parse("https://github.com/1812z/OppoPods")
-                            context.startActivity(this)
-                        }
+                        context.openUrl("https://github.com/1812z/OppoPods")
                     }
                 )
                 BasicComponent(
                     title = "OppoPods",
                     summary = "https://github.com/Leaf-lsgtky/OppoPods",
                     onClick = {
-                        Intent(Intent.ACTION_VIEW).apply {
-                            this.data = Uri.parse("https://github.com/Leaf-lsgtky/OppoPods")
-                            context.startActivity(this)
-                        }
+                        context.openUrl("https://github.com/Leaf-lsgtky/OppoPods")
                     }
                 )
                 BasicComponent(
@@ -62,10 +67,7 @@ fun AboutPage(
                     title = "Github",
                     summary = "https://github.com/Art-Chen/HyperPods",
                     onClick = {
-                        Intent(Intent.ACTION_VIEW).apply {
-                            this.data = Uri.parse("https://github.com/Art-Chen/HyperPods")
-                            context.startActivity(this)
-                        }
+                        context.openUrl("https://github.com/Art-Chen/HyperPods")
                     }
                 )
             }
