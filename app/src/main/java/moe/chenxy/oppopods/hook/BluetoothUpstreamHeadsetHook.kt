@@ -24,6 +24,11 @@ import org.json.JSONObject
 class BluetoothUpstreamHeadsetHook : HookContext() {
     private val TAG = "OppoPods-Upstream"
     private val DESCRIPTOR = "com.android.bluetooth.ble.app.IMiuiHeadsetService"
+    private companion object {
+        const val HFP_STATE_CONNECTED = 2
+        const val TOAST_RETRY_DELAY_MS = 300L
+        const val TOAST_MAX_RETRIES = 10
+    }
     private val knownOppoAddresses = linkedSetOf<String>()
     private val callbacks = linkedMapOf<IBinder, Any>()
     private val handler = Handler(Looper.getMainLooper())
@@ -83,43 +88,17 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         }
 
         val notificationClass = findClassOrNull("com.android.bluetooth.ble.app.MiuiBluetoothNotification")
-        val requestClass = findClassOrNull("com.android.bluetooth.ble.app.C4705R2")
+        val requestClass = findClassOrNull("com.android.bluetooth.ble.app.S2")
+            ?: findClassOrNull("com.android.bluetooth.ble.app.C4705R2")
+
+        hookCloudParserNotifyFlags()
+
         if (notificationClass != null) {
-            runCatching {
-                hookBefore(notificationClass.method("invokeStatusBar", Context::class.java, String::class.java, Bundle::class.java)) {
-                    val bundle = args[2] as? Bundle
-                    if (shouldInterceptHeadsetWearIsland(bundle)) {
-                        when (ConfigManager.islandMode()) {
-                            ConfigManager.ISLAND_MODE_NONE, ConfigManager.ISLAND_MODE_MODULE -> {
-                                result = null
-                                Log.d(TAG, "invokeStatusBar swallowed headset_wear_notification island mode=${ConfigManager.islandMode()}")
-                                return@hookBefore
-                            }
-                        }
-                    }
-                    patchHeadsetWearIslandBundle(bundle)
-                    Log.d(TAG, "invokeStatusBar upstream action=${args[1]} bundle=$bundle focus=${bundle?.getString("miui.focus.param")}")
-                }
-                Log.d(TAG, "MiuiBluetoothNotification.invokeStatusBar debug hook installed")
-            }.onFailure { Log.w(TAG, "hook MiuiBluetoothNotification.invokeStatusBar skipped", it) }
+            hookHfpChangedForLea(notificationClass)
+            hookInvokeStatusBar(notificationClass)
         }
         if (notificationClass != null && requestClass != null) {
-            runCatching {
-                hookAfter(notificationClass.method("updateParameters", requestClass)) {
-                    val request = args[0] ?: return@hookAfter
-                    val device = getObjectField(request, "f18110e") as? BluetoothDevice
-                    if (!isOppoPod(device)) return@hookAfter
-                    val battery = effectiveBattery() ?: return@hookAfter
-                    val leftBattery = displayBattery(battery.left)
-                    val rightBattery = displayBattery(battery.right)
-                    val wearState = displayWearState(battery, getObjectField(request, "f18109d") as? Int ?: 1)
-                    leftBattery?.let { setObjectField(request, "f18107b", it) }
-                    rightBattery?.let { setObjectField(request, "f18108c", it) }
-                    setObjectField(request, "f18109d", wearState)
-                    Log.d(TAG, "updateParameters patched device=${device.describe()} left=$leftBattery right=$rightBattery wear=$wearState")
-                }
-                Log.d(TAG, "MiuiBluetoothNotification.updateParameters hook installed")
-            }.onFailure { Log.w(TAG, "hook MiuiBluetoothNotification.updateParameters skipped", it) }
+            hookUpdateParameters(notificationClass, requestClass)
         }
     }
 
@@ -155,6 +134,85 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
 
     private fun findClassOrNull(className: String): Class<*>? {
         return runCatching { findClass(className) }.getOrNull()
+    }
+
+    // 绕过云端配置检查，实测 OPPO 耳机连接通知会被拦截
+    private fun hookCloudParserNotifyFlags() {
+        val cloudParserClass = findClassOrNull("com.android.bluetooth.ble.app.MiuiCloudParser")
+            ?: findClassOrNull("com.android.bluetooth.ble.app.Y2")
+        if (cloudParserClass == null) return
+        runCatching {
+            val method = cloudParserClass.declaredMethods.firstOrNull {
+                it.name == "d" && it.parameterTypes.size == 2 && it.returnType == Boolean::class.javaPrimitiveType
+            }
+            if (method != null) {
+                hookBefore(method) { result = true }
+            }
+        }.onFailure { Log.d(TAG, "hook MiuiCloudParser.getNotifyFlags skipped", it) }
+    }
+
+    // OPPO 耳机连接时主动触发超级岛弹窗
+    private fun hookHfpChangedForLea(notificationClass: Class<*>) {
+        runCatching {
+            val method = notificationClass.declaredMethods.firstOrNull {
+                it.name == "handleHfpChangedForLea" && it.parameterTypes.size == 2
+            }
+            if (method != null) {
+                hookAfter(method) {
+                    val device = args[0] as? BluetoothDevice ?: return@hookAfter
+                    val state = args[1] as? Int ?: return@hookAfter
+                    if (!isOppoPod(device) || state != HFP_STATE_CONNECTED) return@hookAfter
+                    showConnectedToastWithRetry(instance, device)
+                }
+            }
+        }.onFailure { Log.d(TAG, "hook handleHfpChangedForLea skipped", it) }
+    }
+
+    private fun hookInvokeStatusBar(notificationClass: Class<*>) {
+        runCatching {
+            hookBefore(notificationClass.method("invokeStatusBar", Context::class.java, String::class.java, Bundle::class.java)) {
+                val bundle = args[2] as? Bundle
+                if (shouldInterceptHeadsetWearIsland(bundle)) {
+                    when (ConfigManager.islandMode()) {
+                        ConfigManager.ISLAND_MODE_NONE, ConfigManager.ISLAND_MODE_MODULE -> {
+                            result = null
+                            Log.d(TAG, "invokeStatusBar swallowed headset_wear_notification island mode=${ConfigManager.islandMode()}")
+                            return@hookBefore
+                        }
+                    }
+                }
+                patchHeadsetWearIslandBundle(bundle)
+                Log.d(TAG, "invokeStatusBar upstream action=${args[1]} bundle=$bundle focus=${bundle?.getString("miui.focus.param")}")
+            }
+            Log.d(TAG, "MiuiBluetoothNotification.invokeStatusBar debug hook installed")
+        }.onFailure { Log.w(TAG, "hook MiuiBluetoothNotification.invokeStatusBar skipped", it) }
+    }
+
+    private fun hookUpdateParameters(notificationClass: Class<*>, requestClass: Class<*>) {
+        runCatching {
+            hookAfter(notificationClass.method("updateParameters", requestClass)) {
+                val request = args[0] ?: return@hookAfter
+                // 通过字段类型获取 BluetoothDevice 和 int 字段
+                val requestFields = requestClass.declaredFields
+                val deviceField = requestFields.firstOrNull { it.type == BluetoothDevice::class.java }
+                val intFields = requestFields.filter { it.type == Int::class.javaPrimitiveType }
+                val device = deviceField?.let { getObjectField(request, it.name) } as? BluetoothDevice
+                if (!isOppoPod(device)) return@hookAfter
+                val battery = effectiveBattery() ?: return@hookAfter
+                val leftBattery = displayBattery(battery.left)
+                val rightBattery = displayBattery(battery.right)
+                // int 字段顺序：requestFlag, leftBattery, rightBattery, wearState
+                val wearStateField = intFields.getOrNull(3)
+                val leftBatteryField = intFields.getOrNull(1)
+                val rightBatteryField = intFields.getOrNull(2)
+                val wearState = displayWearState(battery, wearStateField?.let { getObjectField(request, it.name) } as? Int ?: 1)
+                leftBatteryField?.let { setObjectField(request, it.name, leftBattery) }
+                rightBatteryField?.let { setObjectField(request, it.name, rightBattery) }
+                wearStateField?.let { setObjectField(request, it.name, wearState) }
+                Log.d(TAG, "updateParameters patched device=${device.describe()} left=$leftBattery right=$rightBattery wear=$wearState")
+            }
+            Log.d(TAG, "MiuiBluetoothNotification.updateParameters hook installed")
+        }.onFailure { Log.w(TAG, "hook MiuiBluetoothNotification.updateParameters skipped", it) }
     }
 
     private fun registerStatusReceiver(ctx: Context?) {
@@ -604,6 +662,21 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
 
     private fun Parcel.readDevice(): BluetoothDevice? {
         return if (readInt() != 0) BluetoothDevice.CREATOR.createFromParcel(this) else null
+    }
+
+    // 等电池数据就绪后弹超级岛，带重试
+    private fun showConnectedToastWithRetry(notification: Any?, device: BluetoothDevice, retriesLeft: Int = TOAST_MAX_RETRIES) {
+        val battery = effectiveBattery()
+        if (battery == null && retriesLeft > 0) {
+            handler.postDelayed({ showConnectedToastWithRetry(notification, device, retriesLeft - 1) }, TOAST_RETRY_DELAY_MS)
+            return
+        }
+        val leftBattery = battery?.let { displayBattery(it.left) } ?: 0
+        val rightBattery = battery?.let { displayBattery(it.right) } ?: 0
+        val wearState = battery?.let { w -> displayWearState(w, 1) } ?: 1
+        runCatching {
+            callMethod(notification, "showConnectedToast", 2, leftBattery, rightBattery, wearState, device, device.name)
+        }
     }
 
     private fun isOppoPod(device: BluetoothDevice?): Boolean {
