@@ -36,6 +36,8 @@ fun SettingsPage(
     onLogLevelChange: (Int) -> Unit = {},
     islandMode: MutableState<Int> = mutableStateOf(ConfigManager.ISLAND_MODE_OFFICIAL),
     onIslandModeChange: (Int) -> Unit = {},
+    focusNotification: MutableState<Boolean> = mutableStateOf(true),
+    onFocusNotificationChange: (Boolean) -> Unit = {},
     islandShowTimings: MutableState<Set<Int>> = mutableStateOf(emptySet()),
     onIslandShowTimingsChange: (Set<Int>) -> Unit = {},
     appLanguage: MutableState<Int> = mutableStateOf(AppLocale.SYSTEM),
@@ -186,6 +188,12 @@ fun SettingsPage(
 
         item {
             Card(modifier = Modifier.padding(top = 12.dp)) {
+                SwitchPreference(
+                    title = stringResource(R.string.focus_notification),
+                    summary = stringResource(R.string.focus_notification_summary),
+                    checked = focusNotification.value,
+                    onCheckedChange = { onFocusNotificationChange(it) }
+                )
                 OverlayDropdownPreference(
                     title = stringResource(R.string.island_mode),
                     summary = stringResource(R.string.island_mode_summary),

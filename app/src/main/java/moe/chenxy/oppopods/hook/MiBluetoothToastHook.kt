@@ -39,6 +39,12 @@ object MiBluetoothToastHook : HookContext() {
 
     override fun onHook() {
 
+        // 焦点通知总开关：关闭后不再创建/刷新通知，并撤掉已显示的通知
+        if (!ConfigManager.focusNotification()) {
+            Log.d("OppoPods", "focus notification disabled, skip MiBluetoothToastHook")
+            return
+        }
+
         fun deleteIntent(context: Context, bluetoothDevice: BluetoothDevice): PendingIntent? {
             val intent = Intent("com.android.bluetooth.headset.notification.cancle")
             intent.putExtra("android.bluetooth.device.extra.DEVICE", bluetoothDevice)
@@ -264,6 +270,11 @@ object MiBluetoothToastHook : HookContext() {
                             } else if (p1?.action == "chen.action.oppopods.updatepodsnotification") {
                                 val batteryParams = p1.getParcelableExtra<BatteryParams>("batteryParams", BatteryParams::class.java)
                                 val device = p1.getParcelableExtra("device", BluetoothDevice::class.java)
+                                // 焦点通知开关：关闭时不再刷新，并撤掉已显示的焦点通知
+                                if (!ConfigManager.focusNotification()) {
+                                    device?.let { cancelNotification(it, context) }
+                                    return
+                                }
                                 if (batteryParams != null && ConfigManager.islandMode() == ConfigManager.ISLAND_MODE_OFFICIAL) {
                                     val shape = batteryShape(batteryParams)
                                     if (lastOfficialIslandShape == null || shape != lastOfficialIslandShape) {

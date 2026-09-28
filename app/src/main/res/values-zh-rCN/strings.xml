@@ -122,6 +122,8 @@
     <string name="adaptive_mode">自适应模式</string>
     <string name="adaptive_mode_summary">为兼容耳机启用自适应降噪模式，关闭后将隐藏该选项并禁用相关音频处理</string>
     <string name="island_mode">超级岛</string>
+    <string name="focus_notification">焦点通知</string>
+    <string name="focus_notification_summary">通知栏显示一条焦点通知用于操作耳机</string>
     <string name="island_mode_summary">选择要显示的电量超级岛</string>
     <string name="island_mode_none">不显示</string>
     <string name="island_mode_official">官方</string>

@@ -121,6 +121,8 @@
     <string name="adaptive_mode">Adaptive Mode</string>
     <string name="adaptive_mode_summary">Enable Adaptive noise control mode for compatible earphones</string>
     <string name="island_mode">Super Island</string>
+    <string name="focus_notification">Focus Notification</string>
+    <string name="focus_notification_summary">Show a focus notification in the notification shade to control the earphones</string>
     <string name="island_mode_summary">Choose which battery island is displayed</string>
     <string name="island_mode_none">none</string>
     <string name="island_mode_official">Official</string>

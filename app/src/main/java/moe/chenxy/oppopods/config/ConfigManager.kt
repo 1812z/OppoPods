@@ -16,6 +16,7 @@ data class AppConfig(
     val moreClickAction: Int = ConfigManager.MORE_CLICK_MODULE,
     val milinkCardFeatures: Set<Int> = ConfigManager.DEFAULT_MILINK_CARD_FEATURES,
     val autoGameMode: Boolean = false,
+    val focusNotification: Boolean = true,
 )
 
 object ConfigManager {
@@ -30,6 +31,7 @@ object ConfigManager {
     const val PREF_KEY_MORE_CLICK_ACTION = "more_click_action"
     const val PREF_KEY_MILINK_CARD_FEATURES = "milink_card_features"
     const val PREF_KEY_AUTO_GAME_MODE = "auto_game_mode"
+    const val PREF_KEY_FOCUS_NOTIFICATION = "focus_notification"
     const val DEFAULT_FAKE_DEVICE_ID = "01010607"
     const val LOG_LEVEL_OFF = 0
     const val LOG_LEVEL_BASIC = 1
@@ -94,6 +96,8 @@ object ConfigManager {
 
     fun autoGameMode(): Boolean = current().autoGameMode
 
+    fun focusNotification(): Boolean = current().focusNotification
+
     fun fakeSupport(): String = "${fakeDeviceId()},000000000000000010000000"
 
     fun updateFakeDeviceId(prefs: SharedPreferences, fakeDeviceId: String) {
@@ -139,6 +143,10 @@ object ConfigManager {
         save(prefs, service, current().copy(autoGameMode = enabled))
     }
 
+    fun updateFocusNotification(prefs: SharedPreferences, service: XposedService?, enabled: Boolean) {
+        save(prefs, service, current().copy(focusNotification = enabled))
+    }
+
     fun save(prefs: SharedPreferences, config: AppConfig) {
         val oldConfig = cachedConfig
         val normalized = config.copy(fakeDeviceId = config.fakeDeviceId.normalizedFakeDeviceId())
@@ -170,6 +178,7 @@ object ConfigManager {
             .putInt(PREF_KEY_MORE_CLICK_ACTION, config.moreClickAction)
             .putStringSet(PREF_KEY_MILINK_CARD_FEATURES, config.milinkCardFeatures.map(Int::toString).toSet())
             .putBoolean(PREF_KEY_AUTO_GAME_MODE, config.autoGameMode)
+            .putBoolean(PREF_KEY_FOCUS_NOTIFICATION, config.focusNotification)
             .commit()
     }
 
@@ -185,6 +194,8 @@ object ConfigManager {
             ?.toSet()
         val directAutoGameMode = prefs.takeIf { it.contains(PREF_KEY_AUTO_GAME_MODE) }
             ?.getBoolean(PREF_KEY_AUTO_GAME_MODE, false)
+        val directFocusNotification = prefs.takeIf { it.contains(PREF_KEY_FOCUS_NOTIFICATION) }
+            ?.getBoolean(PREF_KEY_FOCUS_NOTIFICATION, true)
         val raw = prefs.getString(PREF_KEY_CONFIG_JSON, null)
         logPrefsSnapshot(source, prefs, directFakeDeviceId, raw)
         val config = raw?.let {
@@ -201,6 +212,7 @@ object ConfigManager {
                 moreClickAction = directMoreClickAction.takeIf { it != Int.MIN_VALUE } ?: migratedMoreClickAction,
                 milinkCardFeatures = directMilinkCardFeatures ?: config.milinkCardFeatures,
                 autoGameMode = directAutoGameMode ?: config.autoGameMode,
+                focusNotification = directFocusNotification ?: config.focusNotification,
             ).normalized()
         }
         return config.copy(
@@ -212,6 +224,7 @@ object ConfigManager {
             moreClickAction = directMoreClickAction.takeIf { it != Int.MIN_VALUE } ?: migratedMoreClickAction,
             milinkCardFeatures = directMilinkCardFeatures ?: config.milinkCardFeatures,
             autoGameMode = directAutoGameMode ?: config.autoGameMode,
+            focusNotification = directFocusNotification ?: config.focusNotification,
         ).normalized()
     }
 
@@ -278,6 +291,9 @@ object ConfigManager {
             }
             if (oldConfig.autoGameMode != newConfig.autoGameMode) {
                 add("autoGameMode=${oldConfig.autoGameMode}->${newConfig.autoGameMode}")
+            }
+            if (oldConfig.focusNotification != newConfig.focusNotification) {
+                add("focusNotification=${oldConfig.focusNotification}->${newConfig.focusNotification}")
             }
         }
     }

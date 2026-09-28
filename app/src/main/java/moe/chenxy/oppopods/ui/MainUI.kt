@@ -155,6 +155,7 @@ fun MainUI(
     val logLevel = remember { mutableStateOf(appConfig.logLevel) }
     val fakeDeviceId = remember { mutableStateOf(appConfig.fakeDeviceId) }
     val islandMode = remember { mutableStateOf(appConfig.islandMode) }
+    val focusNotification = remember { mutableStateOf(appConfig.focusNotification) }
     val islandShowTimings = remember { mutableStateOf(appConfig.islandShowTimings) }
     val spatialAudioMode = remember { mutableStateOf(prefs.getInt("spatial_audio_mode", ConfigManager.SPATIAL_AUDIO_OFF)) }
     val eqPreset = remember { mutableStateOf(-1) }
@@ -719,6 +720,12 @@ fun MainUI(
                     islandMode.value = it
                     ConfigManager.updateIslandMode(prefs, xposedService, it)
                     broadcastConfigChanged(context, "com.android.bluetooth")
+                    broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                },
+                focusNotification = focusNotification,
+                onFocusNotificationChange = {
+                    focusNotification.value = it
+                    ConfigManager.updateFocusNotification(prefs, xposedService, it)
                     broadcastConfigChanged(context, "com.xiaomi.bluetooth")
                 },
                 islandShowTimings = islandShowTimings,
