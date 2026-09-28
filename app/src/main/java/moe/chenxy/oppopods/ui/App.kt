@@ -5,6 +5,8 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import top.yukonga.miuix.kmp.nav.core.NavBackStack
+import top.yukonga.miuix.kmp.nav.core.NavKey
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 
 @Composable
@@ -25,7 +27,7 @@ fun App(
         2 -> ColorSchemeMode.Dark
         else -> ColorSchemeMode.System
     }
-    val backStack = remember { mutableStateListOf<Screen>(Screen.Main) }
+    val backStack: NavBackStack = remember { mutableStateListOf<NavKey>(Screen.Main) }
 
     AppLocale.Provider(language = appLanguage.value) {
         AppTheme(colorSchemeMode = colorSchemeMode, accentMode = accentMode.value) {

@@ -1,5 +1,13 @@
 package moe.chenxy.oppopods.ui.pages
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,8 +17,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import moe.chenxy.oppopods.R
 import moe.chenxy.oppopods.config.ConfigManager
@@ -25,6 +35,7 @@ import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.ArrowRight
+import top.yukonga.miuix.kmp.anim.folmeSpring
 
 @Composable
 fun SettingsPage(
@@ -187,6 +198,11 @@ fun SettingsPage(
         }
 
         item {
+            val expandSpec: FiniteAnimationSpec<IntSize> =
+                folmeSpring(damping = 0.9f, response = 0.3f)
+            val shrinkSpec: FiniteAnimationSpec<IntSize> =
+                folmeSpring(damping = 1.0f, response = 0.3f)
+
             Card(modifier = Modifier.padding(top = 12.dp)) {
                 SwitchPreference(
                     title = stringResource(R.string.focus_notification),
@@ -194,6 +210,46 @@ fun SettingsPage(
                     checked = focusNotification.value,
                     onCheckedChange = { onFocusNotificationChange(it) }
                 )
+                AnimatedVisibility(
+                    visible = focusNotification.value,
+                    enter = expandVertically(
+                        animationSpec = expandSpec,
+                        expandFrom = Alignment.Top,
+                    ) + fadeIn(animationSpec = tween(220, delayMillis = 40)),
+                    exit = shrinkVertically(
+                        animationSpec = shrinkSpec,
+                        shrinkTowards = Alignment.Top,
+                    ) + fadeOut(animationSpec = tween(120)),
+                ) {
+                    Column {
+                        OverlayDropdownPreference(
+                            title = stringResource(R.string.notification_click_action),
+                            summary = stringResource(R.string.notification_click_action_summary),
+                            items = notificationClickActionOptions,
+                            selectedIndex = notificationClickActionValues.indexOf(notificationClickAction.value).coerceAtLeast(0),
+                            onSelectedIndexChange = { onNotificationClickActionChange(notificationClickActionValues[it]) }
+                        )
+                        AnimatedVisibility(
+                            visible = notificationClickAction.value == ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP,
+                            enter = expandVertically(
+                                animationSpec = expandSpec,
+                                expandFrom = Alignment.Top,
+                            ) + fadeIn(animationSpec = tween(220, delayMillis = 40)),
+                            exit = shrinkVertically(
+                                animationSpec = shrinkSpec,
+                                shrinkTowards = Alignment.Top,
+                            ) + fadeOut(animationSpec = tween(120)),
+                        ) {
+                            OverlayDropdownPreference(
+                                title = stringResource(R.string.more_click_action),
+                                summary = stringResource(R.string.more_click_action_summary),
+                                items = moreClickActionOptions,
+                                selectedIndex = moreClickActionValues.indexOf(moreClickAction.value).coerceAtLeast(0),
+                                onSelectedIndexChange = { onMoreClickActionChange(moreClickActionValues[it]) }
+                            )
+                        }
+                    }
+                }
                 OverlayDropdownPreference(
                     title = stringResource(R.string.island_mode),
                     summary = stringResource(R.string.island_mode_summary),
@@ -220,22 +276,6 @@ fun SettingsPage(
                     entries = milinkCardFeatureEntries,
                     collapseOnSelection = false,
                 )
-                OverlayDropdownPreference(
-                    title = stringResource(R.string.notification_click_action),
-                    summary = stringResource(R.string.notification_click_action_summary),
-                    items = notificationClickActionOptions,
-                    selectedIndex = notificationClickActionValues.indexOf(notificationClickAction.value).coerceAtLeast(0),
-                    onSelectedIndexChange = { onNotificationClickActionChange(notificationClickActionValues[it]) }
-                )
-                if (notificationClickAction.value == ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP) {
-                    OverlayDropdownPreference(
-                        title = stringResource(R.string.more_click_action),
-                        summary = stringResource(R.string.more_click_action_summary),
-                        items = moreClickActionOptions,
-                        selectedIndex = moreClickActionValues.indexOf(moreClickAction.value).coerceAtLeast(0),
-                        onSelectedIndexChange = { onMoreClickActionChange(moreClickActionValues[it]) }
-                    )
-                }
                 BasicComponent(
                     title = stringResource(R.string.fake_device_id),
                     summary = stringResource(R.string.fake_device_id_summary)
