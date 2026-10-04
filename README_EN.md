@@ -10,7 +10,7 @@
 ![Downloads](https://img.shields.io/github/downloads/1812z/OppoPods/total?style=flat-square)
 [![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)](https://android.com)
 [![LSPosed](https://img.shields.io/badge/Framework-LSPosed-blueviolet?style=flat-square)](https://github.com/LSPosed/LSPosed)
-[![HyperOS](https://img.shields.io/badge/ROM-HyperOS%203-orange?style=flat-square)](https://hyperos.mi.com)
+[![HyperOS](https://img.shields.io/badge/ROM-HyperOS%203%2F4-orange?style=flat-square)](https://hyperos.mi.com)
 
 
 **English** | **[Simplified Chinese](README.md)**
@@ -37,10 +37,11 @@ An Xposed module that provides system-level OPPO earphone control for Xiaomi Hyp
 ### Module Features
 - **Quick Popup** — Tap the notification or Control Center earphone card to open a floating popup with battery, noise cancellation, and game mode controls; tap "More" to enter the full page
 - **Quick Launch** — From the notification or Control Center earphone card, quickly jump to HeyMelody, module settings, or system settings
+- **Custom Earphone Image** — Supports one-click import of HeyMelody resources
 
 ### System Requirements
 
-- Xiaomi device running **HyperOS** (Android 15+) (Hyper Island only supports OS3)
+- Xiaomi device running **HyperOS** (Android 15+) (Hyper Island only supports OS3/4)
 - **LSPosed** API version >= 101
 
 ### Usage

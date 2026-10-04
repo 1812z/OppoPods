@@ -11,7 +11,7 @@
 ![Downloads](https://img.shields.io/github/downloads/1812z/OppoPods/total?style=flat-square)
 [![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)](https://android.com)
 [![LSPosed](https://img.shields.io/badge/Framework-LSPosed-blueviolet?style=flat-square)](https://github.com/LSPosed/LSPosed)
-[![HyperOS](https://img.shields.io/badge/ROM-澎湃OS3-orange?style=flat-square)](https://hyperos.mi.com)
+[![HyperOS](https://img.shields.io/badge/ROM-澎湃OS3%2F4-orange?style=flat-square)](https://hyperos.mi.com)
 
 
 **[English](README_EN.md)** | **简体中文**
@@ -38,10 +38,11 @@
 ### 模块功能
 - **快捷弹窗** — 点击通知或控制中心耳机卡片，弹出浮窗显示电量、降噪、游戏模式控制；点击「更多」进入完整页面
 - **快捷跳转** — 通知或控制中心耳机卡片，支持快速跳转欢律/模块设置/系统设置
+- **自定义耳机图片** — 支持一键导入欢律资源
 
 ### 系统要求
 
-- 小米设备，运行 **HyperOS**（Android 15+）(超级岛仅支持OS3)
+- 小米设备，运行 **HyperOS**（Android 15+）(超级岛仅支持OS3/4)
 - **LSPosed** API版本>=101
 
 ### 使用
