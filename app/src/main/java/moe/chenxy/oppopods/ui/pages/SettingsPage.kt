@@ -64,6 +64,7 @@ fun SettingsPage(
     fakeDeviceId: MutableState<String> = mutableStateOf(ConfigManager.DEFAULT_FAKE_DEVICE_ID),
     onFakeDeviceIdChange: (String) -> Unit = {},
     onOpenTheme: () -> Unit = {},
+    onOpenLeAudio: () -> Unit = {},
     onOpenAbout: () -> Unit = {}
 ) {
     val languageOptions = listOf(
@@ -286,6 +287,19 @@ fun SettingsPage(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                )
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.padding(top = 12.dp)) {
+                BasicComponent(
+                    title = stringResource(R.string.le_audio_title),
+                    summary = stringResource(R.string.le_audio_summary),
+                    onClick = onOpenLeAudio,
+                    endActions = {
+                        Icon(imageVector = MiuixIcons.Basic.ArrowRight, contentDescription = null)
+                    },
                 )
             }
         }

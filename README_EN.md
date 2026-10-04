@@ -51,11 +51,26 @@ An Xposed module that provides system-level OPPO earphone control for Xiaomi Hyp
 3. Use the one-tap scope restart button in the top-right corner of the app
 4. Connect your OPPO earphones via Bluetooth
 
+### OPPO LE Audio (LC3)
+
+Open **Settings → OPPO LE Audio**. The master switch is followed by latency, connection, stability and vendor-protocol settings.
+
+AT replies alone are insufficient: preserve/repair classic A2DP and HFP policy first, establish the lead earbud HFP initialization channel, give LE Audio a connection opportunity, complete the group, retain both GATT links and activate the lead. Enabling only system LC3 may disable classic/HFP and prevent AT initialization. Java CONNECTED alone does not guarantee stable audio on both earbuds.
+
+Connection-policy repair, LE priority, direct LE initiation, startup classic reconnection, GATT retention, group completion, context repair and vendor initialization default to enabled. **HFP gating defaults to off and should remain off** for Enco X3 earbud coordination. **Global low latency defaults to off** because bitrate and quality may decrease and the system may reset game state during playback. Context repair never overwrites a nonzero system value. GATT holders may increase power usage and are released on manual disconnect, ACL loss or feature disable.
+
+User-disabled profiles are tracked in the current Bluetooth process; inherited disabled policies from a previous process cannot be reliably distinguished and may be repaired. Startup classic reconnection is limited to one attempt per startup cycle and is not triggered by LE disconnection after closing the case. Missing group members receive one direct completion attempt per manual connection intent; an initial service-discovery failure with ACL still online may trigger one GATT cache refresh and retry.
+
+After upgrading, restart Bluetooth, put both earbuds in the case and reopen it. Basic `OppoPods-LEAudio` logs now include hook installation, policy repair, AT traffic, LE state, group completion and GATT holder lifecycle. Defaults: Vendor ID `1946`, OESF mask `0x3f`.
+
+This port restores the connection/stability path, but does not yet include the reference module BLE/SIRK cross-phone ownership protocol or automatic group yielding on HCI 0x13. Manual disconnect pauses local group reconnection and releases holders; a new manual connection resumes it.
+
 ### Credits
 
 - [HyperPods](https://github.com/Art-Chen/HyperPods) by Art_Chen — original project
 - [Miuix](https://github.com/YuKongA/miuix) — HyperOS-style Compose UI components
 - [OPPOPods](https://github.com/Leaf-lsgtky/OppoPods) - by Leaf-lsgtky
+- [OPPOLeaConnect](https://github.com/Leaf-lsgtky/OPPOLeaConnect) — reference for LE Audio connection, policy repair and earbud stability (GPL-3.0)
 
 ### License
 

@@ -17,6 +17,7 @@ data class AppConfig(
     val milinkCardFeatures: Set<Int> = ConfigManager.DEFAULT_MILINK_CARD_FEATURES,
     val autoGameMode: Boolean = false,
     val focusNotification: Boolean = true,
+    val leAudio: LeAudioConfig = LeAudioConfig(),
 )
 
 object ConfigManager {
@@ -147,9 +148,13 @@ object ConfigManager {
         save(prefs, service, current().copy(focusNotification = enabled))
     }
 
+    fun updateLeAudio(prefs: SharedPreferences, service: XposedService?, config: LeAudioConfig) {
+        save(prefs, service, current().copy(leAudio = config.normalized()))
+    }
+
     fun save(prefs: SharedPreferences, config: AppConfig) {
         val oldConfig = cachedConfig
-        val normalized = config.copy(fakeDeviceId = config.fakeDeviceId.normalizedFakeDeviceId())
+        val normalized = config.copy(fakeDeviceId = config.fakeDeviceId.normalizedFakeDeviceId(), leAudio = config.leAudio.normalized())
         cachedConfig = normalized
         writePrefs(prefs, normalized)
         logConfigChange("save", oldConfig, normalized)
@@ -157,7 +162,7 @@ object ConfigManager {
 
     fun save(prefs: SharedPreferences, service: XposedService?, config: AppConfig) {
         val oldConfig = cachedConfig
-        val normalized = config.copy(fakeDeviceId = config.fakeDeviceId.normalizedFakeDeviceId())
+        val normalized = config.copy(fakeDeviceId = config.fakeDeviceId.normalizedFakeDeviceId(), leAudio = config.leAudio.normalized())
         cachedConfig = normalized
         writePrefs(prefs, normalized)
         service?.getRemotePreferences(PREFS_NAME)?.let { remotePrefs ->
@@ -229,6 +234,7 @@ object ConfigManager {
     }
 
     private fun AppConfig.normalized(): AppConfig = copy(
+        leAudio = leAudio.normalized(),
         fakeDeviceId = fakeDeviceId.normalizedFakeDeviceId(),
         logLevel = logLevel.coerceIn(LOG_LEVEL_OFF, LOG_LEVEL_DEBUG),
         islandMode = islandMode.coerceIn(ISLAND_MODE_NONE, ISLAND_MODE_MODULE),
@@ -268,6 +274,9 @@ object ConfigManager {
 
     private fun changedFields(oldConfig: AppConfig, newConfig: AppConfig): List<String> {
         return buildList {
+            if (oldConfig.leAudio != newConfig.leAudio) {
+                add("leAudio=${oldConfig.leAudio}->${newConfig.leAudio}")
+            }
             if (oldConfig.fakeDeviceId != newConfig.fakeDeviceId) {
                 add("fakeDeviceId=${oldConfig.fakeDeviceId}->${newConfig.fakeDeviceId}")
             }

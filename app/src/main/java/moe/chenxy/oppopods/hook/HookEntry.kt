@@ -6,7 +6,7 @@ import androidx.annotation.RequiresApi
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 import moe.chenxy.oppopods.config.ConfigManager
-import moe.chenxy.oppopods.hook.lc3.Lc3HandshakeHook
+import moe.chenxy.oppopods.hook.leaudio.OppoLeAudioHook
 import moe.chenxy.oppopods.hook.milink.MiLinkServiceHook
 
 class HookEntry : XposedModule() {
@@ -19,14 +19,13 @@ class HookEntry : XposedModule() {
 
         when (param.packageName) {
             "com.android.bluetooth" -> {
-                loadHook(Lc3HandshakeHook(), param.defaultClassLoader, param.packageName)
+                loadHook(OppoLeAudioHook(), param.defaultClassLoader, param.packageName)
                 loadHook(HeadsetStateDispatcher, param.defaultClassLoader, param.packageName)
                 loadHook(BluetoothUpstreamHeadsetHook(), param.defaultClassLoader, param.packageName)
             }
             //"com.android.settings" -> loadHook(SettingsHeadsetHook, param.defaultClassLoader, param.packageName)
             "com.milink.service" -> loadHook(MiLinkServiceHook, param.defaultClassLoader, param.packageName)
             "com.xiaomi.bluetooth" -> {
-                loadHook(Lc3HandshakeHook(), param.defaultClassLoader, param.packageName)
                 loadHook(MiBluetoothToastHook, param.defaultClassLoader, param.packageName)
                 loadHook(BluetoothUpstreamHeadsetHook(), param.defaultClassLoader, param.packageName)
             }
