@@ -97,7 +97,7 @@ class OppoLeAudioHook : HookContext() {
                 handler.postAtTime({
                     runCatching {
                         val current = ConfigManager.current().leAudio
-                        if (current.enabled && current.sendVdsp && !connection.isPaused(device) && device.bondState == BluetoothDevice.BOND_BONDED &&
+                        if (current.enabled && current.sendVdsp && connection.isTarget(device) && !connection.isPaused(device) && device.bondState == BluetoothDevice.BOND_BONDED &&
                             stateMethod.invoke(sm) == BluetoothProfile.STATE_CONNECTED) {
                             send(native, device, "+VDSP=1,1", acknowledge = false)
                         }

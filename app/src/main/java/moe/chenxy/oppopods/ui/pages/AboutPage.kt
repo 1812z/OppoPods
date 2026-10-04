@@ -11,9 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import moe.chenxy.oppopods.R
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
 
@@ -60,14 +58,17 @@ fun AboutPage(
                     }
                 )
                 BasicComponent(
-                    title = stringResource(R.string.based_on),
-                    summary = "HyperPods by Art_Chen"
-                )
-                BasicComponent(
-                    title = "Github",
+                    title = "HyperPods",
                     summary = "https://github.com/Art-Chen/HyperPods",
                     onClick = {
                         context.openUrl("https://github.com/Art-Chen/HyperPods")
+                    }
+                )
+                BasicComponent(
+                    title = "OPPOLeaConnect",
+                    summary = "https://github.com/Leaf-lsgtky/OPPOLeaConnect",
+                    onClick = {
+                        context.openUrl("https://github.com/Leaf-lsgtky/OPPOLeaConnect")
                     }
                 )
             }

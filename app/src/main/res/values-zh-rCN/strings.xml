@@ -178,4 +178,10 @@
     <string name="le_audio_complete_group_summary">首耳连上或缺失耳失败时，同组仍在线则直接补缺失成员一次；不把 Java 已连接状态当作双耳链路稳定的保证。</string>
     <string name="le_audio_adopt_contexts">补全可用音频上下文</string>
     <string name="le_audio_adopt_contexts_summary">恢复参考模块的空上下文修复和双耳就绪后的主耳激活；优先使用该组 native 上报，系统已填入非零值时不覆盖。</string>
+    <string name="le_audio_devices">选择介入设备</string>
+    <string name="le_audio_devices_count">已选择 %1$d 个 MAC 地址；未选择时不介入任何设备</string>
+    <string name="le_audio_devices_hint">选择需要 LE Audio 兼容的已配对耳机。按 MAC 地址判断，同组经典/双耳 LE 地址由系统关联，不再匹配设备名称。</string>
+    <string name="le_audio_devices_permission">授予蓝牙设备权限</string>
+    <string name="le_audio_devices_save">保存</string>
+    <string name="le_audio_saved_device">已保存设备（当前不在配对列表）</string>
 </resources>

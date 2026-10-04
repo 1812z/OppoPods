@@ -177,4 +177,10 @@
     <string name="le_audio_complete_group_summary">When one member connects or another fails, attempt the missing member once while a group peer is online. Java CONNECTED alone does not guarantee stable links for both earbuds.</string>
     <string name="le_audio_adopt_contexts">Repair available audio contexts</string>
     <string name="le_audio_adopt_contexts_summary">Restore empty-context repair and lead activation after both earbuds are ready. Prefer native reports for that group; never overwrite a nonzero system value.</string>
+    <string name="le_audio_devices">Select target devices</string>
+    <string name="le_audio_devices_count">%1$d MAC addresses selected; no devices are managed when empty</string>
+    <string name="le_audio_devices_hint">Select paired earbuds requiring LE Audio compatibility. Matching uses MAC addresses with system mappings for classic and LE group members, never device names.</string>
+    <string name="le_audio_devices_permission">Grant Bluetooth device permission</string>
+    <string name="le_audio_devices_save">Save</string>
+    <string name="le_audio_saved_device">Saved device (not currently paired)</string>
 </resources>

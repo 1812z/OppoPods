@@ -5,7 +5,8 @@ import kotlinx.serialization.Serializable
 /** OPPOLeaConnect compatibility switches, including the HyperOS connection prerequisites. */
 @Serializable
 data class LeAudioConfig(
-    val enabled: Boolean = true,
+    val enabled: Boolean = false,
+    val deviceAddresses: Set<String> = emptySet(),
     val respondAt: Boolean = true,
     val sendVdsp: Boolean = true,
     val vendorId: String = "1946",
@@ -26,6 +27,8 @@ data class LeAudioConfig(
     }?.takeIf { it in 0..0xFFFF }
 
     fun normalized(): LeAudioConfig = copy(
+        deviceAddresses = deviceAddresses.map { it.trim().uppercase(java.util.Locale.ROOT) }
+            .filter { android.bluetooth.BluetoothAdapter.checkBluetoothAddress(it) }.toSet(),
         vendorId = vendorId.trim().takeIf { value ->
             value.isNotEmpty() && value.all { it in '0'..'9' } &&
                 value.toIntOrNull()?.let { it in 0..0xFFFF } == true

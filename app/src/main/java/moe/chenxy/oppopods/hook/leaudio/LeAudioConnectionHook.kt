@@ -213,13 +213,18 @@ internal class LeAudioConnectionHook : HookContext() {
     }
 
     fun isTarget(device: BluetoothDevice): Boolean {
-        if (device.address in buds) return true
-        val names = listOfNotNull(runCatching { device.name }.getOrNull(),
-            invoke(adapter, "getRemoteName", device) as? String, runCatching { device.alias }.getOrNull())
-        if (names.none { name -> listOf("oppo", "oneplus", "enco").any { name.contains(it, true) } }) return false
-        buds.add(device.address)
-        saveBuds()
-        return true
+        val selected = cfg.deviceAddresses
+        if (selected.isEmpty()) return false
+        if (device.address in selected) return true
+        // Only system group/address mappings can expand the whitelist, never old name caches.
+        val members = group(device).map { it.address }.toSet()
+        if (members.any { it in selected }) return true
+        // A selected classic address can map to LE members before CSIP group discovery completes.
+        return selected.any { address ->
+            val linked = (invoke(adapter, "findLeAudioDevices", address) as? Collection<*>)
+                ?.filterIsInstance<BluetoothDevice>().orEmpty()
+            linked.any { it.address == device.address }
+        }
     }
 
     fun rememberClassic(device: BluetoothDevice) {
@@ -235,7 +240,7 @@ internal class LeAudioConnectionHook : HookContext() {
             ?.putStringSet("all", buds.toSet())?.putString("classic", classicAddress)?.apply()
     }
 
-    fun isPaused(device: BluetoothDevice) = device.address in paused
+    fun isPaused(device: BluetoothDevice) = device.address in paused && isTarget(device)
     private fun groupId(device: BluetoothDevice) = invoke(lea, "getGroupId", device) as? Int ?: -1
     private fun group(device: BluetoothDevice): List<BluetoothDevice> {
         val members = (invoke(lea, "getGroupDevices", groupId(device)) as? Collection<*>)
@@ -312,7 +317,7 @@ internal class LeAudioConnectionHook : HookContext() {
         if (!cfg.enabled || !cfg.wakeClassic || invoke(adapter, "profileServicesRunning") != true ||
             invoke(adapter, "isQuietModeEnabled") == true) return
         val bonded = (invoke(adapter, "getBondedDevices") as? Collection<*>)?.filterIsInstance<BluetoothDevice>().orEmpty()
-        val device = bonded.firstOrNull { it.address == classicAddress } ?: bonded.firstOrNull {
+        val device = bonded.firstOrNull { it.address == classicAddress && isTarget(it) } ?: bonded.firstOrNull {
             it.type != BluetoothDevice.DEVICE_TYPE_LE && isTarget(it)
         } ?: return
         if (isPaused(device) || state(device) == 2 ||
@@ -324,7 +329,7 @@ internal class LeAudioConnectionHook : HookContext() {
     }
 
     private fun complete(device: BluetoothDevice) {
-        if (!cfg.enabled || !cfg.completeGroup || isPaused(device)) return
+        if (!cfg.enabled || !cfg.completeGroup || !isTarget(device) || isPaused(device)) return
         val members = group(device)
         if (members.none { state(it) == 2 }) return
         members.filter { !isPaused(it) && wantsLe(it) && state(it) != 2 && state(it) != 3 }.forEach {
@@ -339,7 +344,7 @@ internal class LeAudioConnectionHook : HookContext() {
     }
 
     private fun hold(device: BluetoothDevice) {
-        if (!cfg.enabled || !cfg.holdGatt || isPaused(device) || !wantsLe(device) ||
+        if (!cfg.enabled || !cfg.holdGatt || !isTarget(device) || isPaused(device) || !wantsLe(device) ||
             (device.address !in acl && state(device) != 2)) return
         val context = adapter as? Context ?: return
         synchronized(held) {
@@ -366,10 +371,10 @@ internal class LeAudioConnectionHook : HookContext() {
         Log.i(tag, "GATT holder released: $address")
     }
     private fun retryDiscovery(device: BluetoothDevice) {
-        if (!cfg.enabled || !cfg.completeGroup || isPaused(device) || device.address in established || !held.containsKey(device.address) ||
+        if (!cfg.enabled || !cfg.completeGroup || !isTarget(device) || isPaused(device) || device.address in established || !held.containsKey(device.address) ||
             !discoveryRetried.add(device.address)) return
         main.post {
-            if (cfg.enabled && cfg.completeGroup && !isPaused(device) && device.address in acl && state(device) != 2 &&
+            if (cfg.enabled && cfg.completeGroup && isTarget(device) && !isPaused(device) && device.address in acl && state(device) != 2 &&
                 invoke(held[device.address], "refresh") == true) {
                 internalCall { invoke(lea, "connect", device) }
                 Log.i(tag, "Retried service discovery once: ${device.address}")
@@ -396,7 +401,7 @@ internal class LeAudioConnectionHook : HookContext() {
         }
     }
     private fun applyGame() {
-        if (cfg.enabled && cfg.gameContext) {
+        if (cfg.enabled && cfg.gameContext && cfg.deviceAddresses.isNotEmpty()) {
             invoke(field(lea, "mNativeInterface"), "setInGame", true)
             gameForced = true
         } else if (gameForced) {
@@ -407,6 +412,10 @@ internal class LeAudioConnectionHook : HookContext() {
     fun configChanged() {
         main.post {
             if (!cfg.enabled || !cfg.holdGatt) held.keys.toList().forEach { release(it) }
+            held.keys.toList().forEach { address ->
+                val device = invoke(adapter, "getRemoteDevice", address) as? BluetoothDevice
+                if (device == null || !isTarget(device)) release(address)
+            }
             if (!cfg.enabled || !cfg.leFirst) { poked.clear(); starved.clear() }
             if (!cfg.enabled) {
                 paused.toList().forEach { address ->
@@ -417,12 +426,12 @@ internal class LeAudioConnectionHook : HookContext() {
             }
             applyGame()
             if (cfg.enabled && cfg.holdGatt) acl.forEach { address ->
-                (invoke(adapter, "getRemoteDevice", address) as? BluetoothDevice)?.let { hold(it) }
+                (invoke(adapter, "getRemoteDevice", address) as? BluetoothDevice)?.takeIf { isTarget(it) }?.let { hold(it) }
             }
         }
     }
     private fun stopGroup(members: List<BluetoothDevice>) = internalCall {
-        members.forEach {
+        members.filter { cfg.enabled && isTarget(it) }.forEach {
             val native = field(lea, "mNativeInterface")
             invoke(native, "setEnableState", it, false)
             invoke(native, "disconnectLeAudio", it)

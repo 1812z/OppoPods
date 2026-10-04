@@ -55,6 +55,10 @@ An Xposed module that provides system-level OPPO earphone control for Xiaomi Hyp
 
 Open **Settings → OPPO LE Audio**. The master switch is followed by latency, connection, stability and vendor-protocol settings.
 
+The master switch defaults to off. Device selection, all advanced options, parameter editing and reset are disabled until it is enabled. Existing saved master-switch values are preserved.
+
+Use **Select target devices** below the master switch to select paired earbuds and save a MAC whitelist. Cancel leaves it unchanged. The whitelist defaults to empty and manages no devices, so select your earbuds after upgrading. Device names are no longer used; classic and LE members are associated only through system address/group mappings. Removing a target releases its module GATT holders. Restoring advanced defaults preserves target selection.
+
 AT replies alone are insufficient: preserve/repair classic A2DP and HFP policy first, establish the lead earbud HFP initialization channel, give LE Audio a connection opportunity, complete the group, retain both GATT links and activate the lead. Enabling only system LC3 may disable classic/HFP and prevent AT initialization. Java CONNECTED alone does not guarantee stable audio on both earbuds.
 
 Connection-policy repair, LE priority, direct LE initiation, startup classic reconnection, GATT retention, group completion, context repair and vendor initialization default to enabled. **HFP gating defaults to off and should remain off** for Enco X3 earbud coordination. **Global low latency defaults to off** because bitrate and quality may decrease and the system may reset game state during playback. Context repair never overwrites a nonzero system value. GATT holders may increase power usage and are released on manual disconnect, ACL loss or feature disable.
